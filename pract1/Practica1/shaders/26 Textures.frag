@@ -3,7 +3,7 @@
 // ShaderToy can use upto four textures. 
 
 uniform vec3 iResolution;
-uniform vec3 iGlobalTime;
+uniform float iGlobalTime;
 uniform sampler2D iChannel0;
 uniform sampler2D iChannel1;
 
@@ -43,13 +43,13 @@ void main(void)
         	               sin(angle),  cos(angle));
 		vec2 q = rotMat*r;
 		vec3 texA = texture2D(iChannel0, q).xyz;
-		vec3 texB = texture2D(iChannel1, q).xyz;  // If we had another channel in this framework, it could be another texture
+		//vec3 texB = texture2D(iChannel1, q).xyz;  // If we had another channel in this framework, it could be another texture
 		
 		angle = -iGlobalTime;
 		rotMat = mat2(cos(angle), -sin(angle),
         	               sin(angle),  cos(angle));
 		q = rotMat*r;		
-		ret = mix(texA, texB, rect(q, vec2(-0.3, -0.3), vec2(.3, .3)) );
+		ret = mix(texA, texA, rect(q, vec2(-0.3, -0.3), vec2(.3, .3)) );
 		
 	}
 	

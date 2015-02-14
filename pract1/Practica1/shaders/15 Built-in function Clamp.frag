@@ -50,7 +50,7 @@ void main(void)
 		ret = clamp(variable, minVal, maxVal);
 	} 
 	else  { // Part IV
-		float y = cos(5.*TWOPI*p.y); // oscillate between +1 and -1
+		float y = cos(9.*TWOPI*p.y); // oscillate between +1 and -1
 		                             // 5 times, vertically
 		y = (y+1.0)*0.5; // map [-1,1] to [0,1]
 		ret = clamp(y, 0.2, 0.8);

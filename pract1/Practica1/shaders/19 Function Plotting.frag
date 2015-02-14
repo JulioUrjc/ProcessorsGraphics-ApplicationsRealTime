@@ -65,7 +65,7 @@ void main(void)
 	float x = r.x;
 	float y = r.y;
 	// pink functions
-	// y = 2*x + 5
+	// y = 2*x + .5
 	if( abs(2.*x + .5 - y) < 0.02 ) pixel = col1;
 	// y = x^2 - .2
 	if( abs(r.x*r.x-0.2 - y) < 0.01 ) pixel = col1;

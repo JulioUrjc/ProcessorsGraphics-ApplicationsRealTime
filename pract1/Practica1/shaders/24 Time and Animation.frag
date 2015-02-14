@@ -7,7 +7,7 @@
 // Let's change some variables in time!
 
 uniform vec3 iResolution;
-uniform vec3 iGlobalTime;
+uniform float iGlobalTime;
 #define PI 3.14159265359
 #define TWOPI 6.28318530718
 
@@ -39,7 +39,7 @@ void main(void)
 		
 	if(p.x < 1./5.) { // Part I
 		vec2 q = r + vec2(xMax*4./5.,0.);
-		ret = vec3(0.2);
+		ret = vec3(col3);
 		// y coordinate depends on time
 		float y = iGlobalTime;
 		// mod constraints y to be between 0.0 and 2.0,
@@ -54,7 +54,7 @@ void main(void)
 		// oscillation
 		float amplitude = 0.8;
 		// y coordinate oscillates with a period of 0.5 seconds
-		float y = 0.8*sin(0.5*iGlobalTime*TWOPI);
+		float y = amplitude*sin(0.5*iGlobalTime*TWOPI);
 		// radius oscillates too
 		float radius = 0.15 + 0.05*sin(iGlobalTime*8.0);
 		ret = mix(ret, col1, disk(q, vec2(0.0, y), radius) );		
@@ -69,20 +69,20 @@ void main(void)
 		float radius = 0.2 + 0.1*sin(iGlobalTime*2.0);
 		// make the color mixture time dependent
 		vec3 color = mix(col1, col2, sin(iGlobalTime)*0.5+0.5);
-		ret = mix(ret, color, rect(q, vec2(x-0.1, y-0.1), vec2(x+0.1, y+0.1)) );		
+		ret = mix(ret, color, rect(q, vec2(x-0.1, y-0.1), vec2(x+radius, y+radius)) );		
 		// try different phases, different amplitudes and different frequencies
 		// for x and y coordinates
 	}
 	else if(p.x < 4./5.) { // Part IV
 		vec2 q = r + vec2(-xMax*2./5.,0.);
-		ret = vec3(0.3);
+		ret = vec3(col2);
 		for(float i=-1.0; i<1.0; i+= 0.2) {
 			float x = 0.2*cos(iGlobalTime*5.0 + i*PI);
 			// y coordinate is the loop value
 			float y = i;
 			vec2 s = q - vec2(x, y);
 			// each box has a different phase
-			float angle = iGlobalTime*3. + i;
+			float angle = iGlobalTime*5. + i;
 			mat2 rot = mat2(cos(angle), -sin(angle), sin(angle),  cos(angle));
 			s = rot*s;
 			ret = mix(ret, col1, rect(s, vec2(-0.06, -0.06), vec2(0.06, 0.06)) );			

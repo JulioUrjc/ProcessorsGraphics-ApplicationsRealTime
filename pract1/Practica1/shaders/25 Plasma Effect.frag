@@ -11,7 +11,7 @@
 // http://en.wikipedia.org/wiki/Plasma_effect
 
 uniform vec3 iResolution;
-uniform vec3 iGlobalTime;
+uniform float iGlobalTime;
 #define PI 3.14159265359
 
 void main(void)
@@ -51,11 +51,11 @@ void main(void)
 	}	
 	else if(p.x < 6./10.) { // Part VI
 		// Add periodicity to the gradients
-		ret = vec3(sin(2.*v));
+		ret = vec3(sin(5.*v));
 	}
 	else if(p.x < 10./10.) { // Part VII
 		// mix colors
-		v *= 1.0;
+		v *= 3.0;
 		ret = vec3(sin(v), sin(v+0.5*PI), sin(v+1.0*PI));
 	}	
 	

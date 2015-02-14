@@ -24,7 +24,7 @@ void main(void)
    
 
     // shape
-    float a = atan(p.x,p.y)/3.141593;
+    float a = atan(p.x,p.y)/3.14;
     float r = length(p);
     float h = abs(a);
     float d = (13.0*h - 22.0*h*h + 10.0*h*h*h)/(6.0-5.0*h);
