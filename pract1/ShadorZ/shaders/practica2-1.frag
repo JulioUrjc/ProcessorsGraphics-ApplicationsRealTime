@@ -69,16 +69,54 @@ float minDistance(in vec2 p){
 	//return 2*minD3-minD2-minD;
 }
 
+vec2 minDistance2(in vec2 p){
+	p *= NUMCELL;
+	float minD = 2.0;
+	float minD2 = 2.0;
+	float minAux=0.0;
+	float poligono=0.0;
+	vec2 entera = floor(p);
+
+	for (int i = -1; i <= 1; i++){
+		for (int j = -1; j <= 1; j++){
+			vec2 auxP = entera + vec2(i, j);
+			vec2 hashP = Hash2(mod(auxP, NUMCELL));
+		
+			minD2 = min(minD2, length(p - auxP - hashP));	
+			vec2 pos = vec2( float(i),float(j) );
+			if (minD2<minD){
+				minAux= minD2;
+				minD2=minD;
+				minD=minAux;
+				poligono = Hash2(length(entera+pos));
+			} 
+		}
+	}
+	
+	return vec2( minD2-minD, poligono);
+}
+
 void main(void){
 	vec2 uv = gl_FragCoord.xy / iResolution.xy;
-	float minD = minDistance(uv);
+	//float minD = minDistance(uv);
 	//minD = 1.0 - minD;    // Inverso
 	//vec3 color = vec3(minD*.93, minD*.23, minD*.13);
 	//vec3 color = vec3(minD, minD,minD);
 	//color*= vec3(uv.x+0.1,uv.y+0.1,uv.x+0.1);
 
-	vec3 color = minD*vec3(0.0,0.0,10.0);
-    color = mix(vec3(0.7,0.0,0.3), color, smoothstep(0.0, 0.0, minD));
+	//vec3 color = minD*vec3(0.0,0.0,10.0);
+    //color = mix(vec3(0.7,0.0,0.3), color, smoothstep(0.0, 0.0, minD));
 
+	vec2 distance = minDistance2(uv);
+	float minD= distance.x;
+	float poly= distance.y*NUMCELL;
+	float brigth = 0.8;  // Brillo 
+	float bordTam=0.9;	 // Tamaño del borde
+	float spotColor=0.2; // Como de plano es el color 0 plano o tesela
+
+	vec3 color = brigth*sin(poly+vec3(0.2,0.2,0.8))-spotColor*minD;	
+    color += bordTam*(2.0-smoothstep(0.0,0.12, minD)-smoothstep(0.0,0.04,minD));
+    color *= mix(vec3(0.7,0.0,0.3), color, smoothstep(0.0, 0.0, minD));
+	
 	gl_FragColor = vec4(color ,0.8);
 }
