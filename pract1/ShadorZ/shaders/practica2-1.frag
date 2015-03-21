@@ -88,7 +88,7 @@ vec2 minDistance2(in vec2 p){
 				minAux= minD2;
 				minD2=minD;
 				minD=minAux;
-				poligono = Hash2(length(entera+pos));
+				poligono = Hash2(length(mod(entera+pos, NUMCELL)));
 			} 
 		}
 	}
