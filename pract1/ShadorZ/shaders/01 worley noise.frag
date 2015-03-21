@@ -15,7 +15,7 @@ uniform vec4 iDate;
 vec2 Hash2(vec2 p)
 {
 	
-	float r = 523.0*sin(iGlobalTime+dot(p, vec2(53.3158, 43.6143)));
+	float r = 523.0*sin(iGlobalTime/5000+dot(p, vec2(53.3158, 43.6143)));
 	return vec2(fract(15.32354 * r), fract(17.25865 * r));
 	
 }
