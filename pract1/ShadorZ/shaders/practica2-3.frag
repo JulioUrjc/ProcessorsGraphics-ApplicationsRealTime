@@ -37,7 +37,7 @@ vec3 celular(vec3 p){
                     minAux= minD2;
                     minD2=minD;
                     minD=minAux;
-                    poligono = Hash2(length(mod(entera+pos, NUMCELL)));
+                    poligono = Hash2(length(entera+pos));
                     //poligono = Hash2(length(entera+pos));
                 } 
             }
@@ -100,8 +100,11 @@ void main( void )
             vec3 texture = celular(pos*.5);
             //float f = celular( 1.0*pos ).x;
             //f *= occ;
-            col = vec3(texture.x*1.2);
-            col = mix( col, vec3(0.9), 1.0-exp( -0.003*tmin*tmin ) );
+            col = .8*sin(texture.y*NUMCELL+vec3(0.5,0.2,0.8))-.01*texture.x;
+            col += .8*(2.0-smoothstep(0.0,0.12, texture.x)-smoothstep(0.0,0.04,texture.x));
+            col *= mix(vec3(0.7,0.0,0.3), col, smoothstep(0.0, 0.0, texture.x));
+            //col += vec3(texture.x*1.2);
+            //col *= mix( col, vec3(0.9), 1.0-exp( -0.003*tmin*tmin ) );
             //vec3 normal_s = pos-ce;
             //vec3 reflection = reflect(rd,normal_s);
             //col = vec3(texture.x);
