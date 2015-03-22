@@ -1,6 +1,8 @@
 uniform vec3 iResolution;
 uniform float iGlobalTime;
 
+const float NUMCELL = 15.0;
+
 // Skeleton based in Inigo Quilez code 
 
 const mat3 m = mat3( 0.00,  0.80,  0.60,
@@ -12,6 +14,32 @@ vec2 Hash2(vec2 p)
 {
     float r = 523.0*sin(dot(p, vec2(53.3158, 43.6143)));
     return vec2(fract(15.32354 * r), fract(17.25865 * r));
+}
+
+vec3 celular(vec3 p){
+    p *= NUMCELL;
+    float minD = 2.0;
+    float minD2 = 2.0;
+    float minAux=0.0;
+    float poligono=0.0;
+    vec2 entera = floor(p);
+
+    for (int i = -1; i <= 1; i++){
+        for (int j = -1; j <= 1; j++){
+            vec2 auxP = entera + vec2(i, j);
+            vec2 hashP = Hash2(mod(auxP, NUMCELL));
+        
+            minD2 = min(minD2, length(p - auxP - hashP));   
+            vec2 pos = vec2( float(i),float(j) );
+            if (minD2<minD){
+                minAux= minD2;
+                minD2=minD;
+                minD=minAux;
+                poligono = Hash2(length(mod(entera+pos, NUMCELL)));
+            } 
+        }
+    }
+    return vec3( minD2-minD, poligono,0);
 }
 
 vec3 env_landscape(float t, vec3 rd)
@@ -41,7 +69,8 @@ void main( void )
     // create view ray
     vec3 rd = normalize( p.x*uu + p.y*vv + 1.5*ww );
     // background
-    vec3 col = env_landscape(0.0, rd);
+    //vec3 col = env_landscape(0.0, rd);
+    vec3 col;
     // sphere center    
     vec3 sc = vec3(0.0,1.0,0.5);
 
@@ -61,7 +90,7 @@ void main( void )
             vec3 pos = ro + tmin*rd;
             vec3 normal_s = pos-ce;
             vec3 reflection = reflect(rd,normal_s);
-            col = env_landscape(0.0, reflection*.5);
+            col = celular(reflection*.5);
         }
     }
  
