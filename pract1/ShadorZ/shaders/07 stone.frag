@@ -83,7 +83,8 @@ vec3 map( in vec3 p )
     return vec3( d1, 1.0, 0.0 );
 #else
 	float h = 0.5+0.5*clamp(1.0-p.y,0.0,1.0);
-	p.y += 0.2*iGlobalTime;
+	//p.y += 0.2*iGlobalTime;
+	p.y += 0.2;
 	vec3 v = voronoi(2.0*p);
 	float f = clamp( 3.5*(v.y-v.x), 0.0, 1.0 );
 	d1 -= 0.2*f*h;

@@ -10,10 +10,10 @@ const mat3 m = mat3( 0.00,  0.80,  0.60,
                     -0.60, -0.48,  0.64 );
 
 
-vec2 Hash2(vec2 p)
+vec3 Hash2(vec3 p)
 {
     float r = 523.0*sin(dot(p, vec2(53.3158, 43.6143)));
-    return vec2(fract(15.32354 * r), fract(17.25865 * r));
+    return vec3(fract(15.32354 * r), fract(17.25865 * r), fract(19.32354 * r));
 }
 
 vec3 celular(vec3 p){
@@ -22,21 +22,25 @@ vec3 celular(vec3 p){
     float minD2 = 2.0;
     float minAux=0.0;
     float poligono=0.0;
-    vec2 entera = floor(p);
+    vec3 entera = floor(p);
 
     for (int i = -1; i <= 1; i++){
         for (int j = -1; j <= 1; j++){
-            vec2 auxP = entera + vec2(i, j);
-            vec2 hashP = Hash2(mod(auxP, NUMCELL));
-        
-            minD2 = min(minD2, length(p - auxP - hashP));   
-            vec2 pos = vec2( float(i),float(j) );
-            if (minD2<minD){
-                minAux= minD2;
-                minD2=minD;
-                minD=minAux;
-                poligono = Hash2(length(mod(entera+pos, NUMCELL)));
-            } 
+            for (int k = -1; k <= 1; k++){
+                vec3 auxP = entera + vec3(i, j, k);
+                vec3 hashP = Hash2(mod(auxP, NUMCELL));
+                //vec2 hashP = Hash2(auxP);
+            
+                minD2 = min(minD2, length(p - auxP - hashP));   
+                vec3 pos = vec3( float(i),float(j),float(k) );
+                if (minD2<minD){
+                    minAux= minD2;
+                    minD2=minD;
+                    minD=minAux;
+                    poligono = Hash2(length(mod(entera+pos, NUMCELL)));
+                    //poligono = Hash2(length(entera+pos));
+                } 
+            }
         }
     }
     return vec3( minD2-minD, poligono,0);
@@ -80,6 +84,11 @@ void main( void )
     float b = dot( rd, ce );
     float c = dot( ce, ce ) - .5;
     float h = b*b - c;
+
+    vec3  nor = vec3(0.0);
+    float occ = 1.0;
+    vec3  pos = vec3(0.0);
+
     if( h>0.0 )
     {
         h = -b - sqrt(h);
@@ -88,9 +97,14 @@ void main( void )
             tmin=h; 
             // shading/lighting
             vec3 pos = ro + tmin*rd;
-            vec3 normal_s = pos-ce;
-            vec3 reflection = reflect(rd,normal_s);
-            col = celular(reflection*.5);
+            vec3 texture = celular(pos*.5);
+            //float f = celular( 1.0*pos ).x;
+            //f *= occ;
+            col = vec3(texture.x*1.2);
+            col = mix( col, vec3(0.9), 1.0-exp( -0.003*tmin*tmin ) );
+            //vec3 normal_s = pos-ce;
+            //vec3 reflection = reflect(rd,normal_s);
+            //col = vec3(texture.x);
         }
     }
  
