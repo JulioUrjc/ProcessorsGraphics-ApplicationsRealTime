@@ -43,7 +43,7 @@ vec3 celular(vec3 p){
             }
         }
     }
-    return vec3( minD2-minD, poligono,0);
+    return vec3( minD2-minD, poligono, 0.0f);
 }
 
 vec3 env_landscape(float t, vec3 rd)
@@ -73,8 +73,8 @@ void main( void )
     // create view ray
     vec3 rd = normalize( p.x*uu + p.y*vv + 1.5*ww );
     // background
-    //vec3 col = env_landscape(0.0, rd);
-    vec3 col;
+    vec3 col = env_landscape(0.0, rd);
+    //vec3 col;
     // sphere center    
     vec3 sc = vec3(0.0,1.0,0.5);
 
