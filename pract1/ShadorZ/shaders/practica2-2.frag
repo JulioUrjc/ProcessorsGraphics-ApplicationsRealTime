@@ -1,7 +1,7 @@
 uniform vec3 iResolution;
 uniform float iGlobalTime;
 
-const float NUMCELL = 15.0;
+const float NUMCELL = 7.0;
 
 const int colorLookUp[256] = {4,3,1,1,1,2,4,2,2,2,5,1,0,2,1,2,2,0,4,3,2,1,2,1,3,2,2,4,2,2,5,1,2,3,2,2,2,2,2,3,2,4,2,5,3,2,2,2,5,3,3,5,2,1,3,3,4,4,2,3,0,4,2,2,2,1,3,2,2,2,3,3,3,1,2,0,2,1,1,2,2,2,2,5,3,2,3,2,3,2,2,1,0,2,1,1,2,1,2,2,1,3,4,2,2,2,5,4,2,4,2,2,5,4,3,2,2,5,4,3,3,3,5,2,2,2,2,2,3,1,1,4,2,1,3,3,4,3,2,4,3,3,3,4,5,1,4,2,4,3,1,2,3,5,3,2,1,3,1,3,3,3,2,3,1,5,5,4,2,2,4,1,3,4,1,5,3,3,5,3,4,3,2,2,1,1,1,1,1,2,4,5,4,5,4,2,1,5,1,1,2,3,3,3,2,5,2,3,3,2,0,2,1,1,4,2,1,3,2,1,2,2,3,2,5,5,3,4,5,5,2,4,4,5,3,2,2,2,1,4,2,3,3,4,2,5,4,2,4,2,2,2,4,5,3,2};
 //lookUp table with poisson
@@ -98,14 +98,14 @@ vec2 minDistance2(in vec2 p){
 
 
 vec2 mutation(in vec2 p){
-	vec2 v1 = minDistance2(p+iGlobalTime);
-	vec2 v2 = minDistance2(p*2. + 1.3 + iGlobalTime*.5);
-	vec2 v3 = minDistance2(p*4. + 2.3 + iGlobalTime*.25);
-	vec2 v4 = minDistance2(p*8. + 3.3 + iGlobalTime*.125);
-	vec2 v5 = minDistance2(p*32. + 4.3 + iGlobalTime*.125);
-	vec2 v6 = sqrt(minDistance2(p * 64. + 5.3 + iGlobalTime * .0625));
-	vec2 v7 = sqrt(sqrt(minDistance2(p * 128. + 7.3)));
-	return sqrt(sqrt(sqrt(v1*v2*v3*v4*v5*v6)));
+	vec2 v1 = minDistance2(p + 0.3 + iGlobalTime);
+	vec2 v2 = minDistance2(p * 2 + 1.3 + iGlobalTime*.05);
+	vec2 v3 = minDistance2(p * 4 + 2.3 + iGlobalTime*.025);
+	vec2 v4 = minDistance2(p * 8 + 3.3 + iGlobalTime*.0125);
+	vec2 v5 = minDistance2(p * 16 + 4.3 + iGlobalTime*.00625);
+	vec2 v6 = minDistance2(p * 32 + 5.3 + iGlobalTime * .003125);
+	vec2 v7 = minDistance2(p * 64 + 6.3 + iGlobalTime * .0015625);
+	return sqrt(sqrt(sqrt(/*v1*/v2*v3*v4*v5*v6)));
 }
 
 void main(void){
@@ -129,9 +129,8 @@ void main(void){
 	float bordTam=0.9;	 // Tamaño del borde
 	float spotColor=0.2; // Como de plano es el color 0 plano o tesela
 
-	vec3 color = brigth*sin(poly+vec3(0.2,0.2,0.8))-spotColor*minD;	
+	vec3 color = brigth*sin(poly-vec3(0.2,0.2,0.8))-spotColor*minD;	
     color += bordTam*(2.0-smoothstep(0.0,0.12, minD)-smoothstep(0.0,0.04,minD));
     color *= mix(vec3(0.7,0.0,0.3), color, smoothstep(0.0, 0.0, minD));
-	
 	gl_FragColor = vec4(color ,0.8);
 }
