@@ -9,9 +9,7 @@ const mat3 m = mat3( 0.00,  0.80,  0.60,
                     -0.80,  0.36, -0.48,
                     -0.60, -0.48,  0.64 );
 
-
-vec3 Hash2(vec3 p)
-{
+vec3 Hash2(vec3 p){
     float r = 523.0*sin(dot(p, vec2(53.3158, 43.6143)));
     return vec3(fract(15.32354 * r), fract(17.25865 * r), fract(19.32354 * r));
 }
@@ -37,17 +35,17 @@ vec3 celular(vec3 p){
                     minAux= minD2;
                     minD2=minD;
                     minD=minAux;
-                    poligono = Hash2(length(entera+pos));
+                    poligono = Hash2(length(mod(entera+pos, NUMCELL)));
                     //poligono = Hash2(length(entera+pos));
                 } 
             }
         }
     }
     return vec3( minD2-minD, poligono, 0.0f);
+    //return vec3( minD, poligono, 0.0f);
 }
 
-vec3 env_landscape(float t, vec3 rd)
-{
+vec3 env_landscape(float t, vec3 rd){
     vec3 light = normalize(vec3(sin(t), 0.6, cos(t)));
     float sun = max(0.0, dot(rd, light));
     float sky = max(0.0, dot(rd, vec3(0.0, 1.0, 0.0)));
@@ -58,8 +56,30 @@ vec3 env_landscape(float t, vec3 rd)
         pow(sky, 1.0)*vec3(0.5, 0.6, 0.7);
 }
 
-void main( void )
-{
+vec3 map( in vec3 p ){
+    //p.y += 0.2*iGlobalTime;
+    vec3 q = vec3( 4.0*fract(0.5+p.x/4.0)-2.0, p.y, 4.0*fract(0.5+p.z/4.0)-2.0 );
+    
+
+    float height = 0.9;
+
+    vec3 v = celular(2.0*p);
+    float f = clamp( 3.5*(v.y-v.x), 0.0, 0.5 );
+    float d1 = length(q) - 1.0- 0.2*f*height;
+    
+    return vec3(d1, mix(1.0,f,height), 0.0 );
+}
+
+vec3 calcNormal( in vec3 pos ){
+    vec3 eps = vec3(0.0001,0.0,0.0);
+
+    return normalize( vec3(
+           map(pos+eps.xyy).x - map(pos-eps.xyy).x,
+           map(pos+eps.yxy).x - map(pos-eps.yxy).x,
+           map(pos+eps.yyx).x - map(pos-eps.yyx).x ) );
+}
+
+void main( void ){
     vec2 p = (-iResolution.xy + 2.0*gl_FragCoord.xy) / iResolution.y;
     
     // camera movement  
@@ -89,20 +109,31 @@ void main( void )
     float occ = 1.0;
     vec3  pos = vec3(0.0);
 
-    if( h>0.0 )
-    {
+    if( h>0.0 ){
         h = -b - sqrt(h);
-        if( h<tmin ) 
-        { 
+        if( h<tmin ) { 
             tmin=h; 
             // shading/lighting
             vec3 pos = ro + tmin*rd;
             vec3 texture = celular(pos*.5);
             //float f = celular( 1.0*pos ).x;
             //f *= occ;
-            col = .8*sin(texture.y*NUMCELL+vec3(0.5,0.2,0.8))-.01*texture.x;
-            col += .8*(2.0-smoothstep(0.0,0.12, texture.x)-smoothstep(0.0,0.04,texture.x));
+            //texture.x=texture.x;
+            //col = vec3(texture.x, texture.x, texture.x);
+           
+            float brigth = 0.8;  // Brillo 
+            float bordTam=0.9;   // Tamaño del borde
+            float spotColor=0.1; // Como de plano es el color 0 plano o tesela
+
+            col = brigth*sin(texture.y*NUMCELL+vec3(0.5,0.2,0.8))-spotColor*texture.x;
+            col += bordTam*(2.0-smoothstep(0.0,0.12, texture.x)-smoothstep(0.0,0.04,texture.x));
             col *= mix(vec3(0.7,0.0,0.3), col, smoothstep(0.0, 0.0, texture.x));
+
+            //vec3  pos = ro + tmat.x*rd;
+            vec3  nor = calcNormal(pos);    
+            vec3 mate = vec3(0.7,0.57,0.5);     
+            col *= mix( mate, (.2), smoothstep(0.7,1.0,nor.y)*smoothstep(0.4,0.5,0.5)*smoothstep(0.1,0.9,.5));
+            
             //col += vec3(texture.x*1.2);
             //col *= mix( col, vec3(0.9), 1.0-exp( -0.003*tmin*tmin ) );
             //vec3 normal_s = pos-ce;

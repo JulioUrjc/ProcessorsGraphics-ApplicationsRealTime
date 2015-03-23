@@ -68,18 +68,28 @@ vec3 voronoi( in vec3 x )
     return vec3( sqrt( res ), abs(id) );
 }
 
-vec3 map( in vec3 p ){
-	//p.y += 0.2*iGlobalTime;
+vec3 map( in vec3 p )
+{
 	vec3 q = vec3( 4.0*fract(0.5+p.x/4.0)-2.0, p.y, 4.0*fract(0.5+p.z/4.0)-2.0 );
-	
+	vec2 id = floor( 0.5+p.xz/4.0 );
+    q.xz += 0.5*(-1.0+2.0*vec2(hash(id.x+113.0*id.y),hash(13.0*id.x+57.0*id.y)));
+	q.y -= 0.5;
+	float d1 = length(q) - 1.0;
 
-	float height = 0.9;
-
+	float d2 = p.y;
+    d1 = min( d1, d2 );
+	d1 = min( d1, length(q.xz)-0.1 );
+#if 0
+    return vec3( d1, 1.0, 0.0 );
+#else
+	float h = 0.5+0.5*clamp(1.0-p.y,0.0,1.0);
+	p.y += 0.2*iGlobalTime;
 	vec3 v = voronoi(2.0*p);
-	float f = clamp( 3.5*(v.y-v.x), 0.0, 0.5 );
-	float d1 = length(q) - 1.0- 0.2*f*height;
+	float f = clamp( 3.5*(v.y-v.x), 0.0, 1.0 );
+	d1 -= 0.2*f*h;
 	
-    return vec3(d1, mix(1.0,f,height), 0.0 );
+    return vec3( 0.6*d1, mix(1.0,f,h), v.z );
+#endif	
 }
 
 float map2( in vec3 p )
@@ -115,7 +125,8 @@ vec3 intersect( in vec3 ro, in vec3 rd )
     return vec3( t, o, m );
 }
 
-vec3 calcNormal( in vec3 pos ){
+vec3 calcNormal( in vec3 pos )
+{
     vec3 eps = vec3(0.0001,0.0,0.0);
 
 	return normalize( vec3(
@@ -160,14 +171,17 @@ void main(void)
 	vec2 q = gl_FragCoord.xy / iResolution.xy;
     vec2 p = -1.0 + 2.0 * q;
     p.x *= iResolution.x/iResolution.y;
+    vec2 m = iMouse.xy/iResolution.xy;
 	
     // camera
     float r2 = p.x*p.x*0.32 + p.y*p.y;
     p *= 0.5 + 0.5*(7.0-sqrt(37.5-11.5*r2))/(r2+1.0);
-    vec3 ro = 3.1*normalize(vec3(0.5,0.1+0.6, 0.5));
+	float an = 0.04*iGlobalTime - 7.0*m.x;
+    vec3 ro = 3.1*normalize(vec3(sin(an),0.1+0.6-0.4*m.y, cos(an)));
     vec3 ta = vec3( 0.0, 0.75, 0.0 );
+	float rl = 0.5*sin(0.35*an);
     vec3 ww = normalize( ta - ro );
-    vec3 uu = normalize( cross(ww,vec3(0.5,0.5,0.0) ) );
+    vec3 uu = normalize( cross(ww,vec3(sin(rl),cos(rl),0.0) ) );
     vec3 vv = normalize( cross(uu,ww));
     vec3 rd = normalize( p.x*uu + p.y*vv + 1.5*ww );
 
@@ -178,12 +192,50 @@ void main(void)
     vec3 tmat = intersect(ro,rd);
     if( tmat.z>-0.5 )
     {
+        // geometry
         vec3  pos = ro + tmat.x*rd;
-        vec3  nor = calcNormal(pos);	
-		vec3 mate = vec3(0.7,0.57,0.5);		
-		col = mix( mate, (.2), smoothstep(0.7,1.0,nor.y)*smoothstep(0.4,0.5,.5)*smoothstep(0.1,0.9,.5));
+        vec3  nor = calcNormal(pos);
+        float cur = calcCurvature(pos,nor);
+
+		// occlusion (rock to rock)
+		float occ = tmat.y*tmat.y;
+		// occlusion (between balls and floor)
+		if( pos.y<0.2 ) 
+			occ *= clamp( map2(pos), 0.0, 0.6 )/0.6;
+		else
+		    occ *= clamp((pos.y-0.2)/1.2,0.0,1.0);
+		
+        // material
+		vec3 qpos = pos;
+		qpos.y += 0.2*iGlobalTime;
+		vec3 snor = nor;;
+		nor = doBumpMap( 0.2*qpos, nor, 0.5 );
+		vec4 mate = vec4(0.7,0.57,0.5,1.0);
+		mate.xyz *= fbm( 15.0*qpos, nor );
+		mate.xyz += 0.08*sin( tmat.z*10.0 + vec3(0.0,0.5,1.0) );
+		mate.xyz *= 0.8 + 0.4*hash(tmat.z);
+		mate *= smoothstep( 0.0, 1.0, fbm( 4.0*qpos, nor ) );
+        float ru = cur*smoothstep( 0.4, 0.7, fbm(4.0*qpos,snor) );
+        mate = mix( mate, vec4(1.4,1.3,1.2,0.0), ru );
+        vec3 green = 0.5*vec3(0.4,0.25,0.0);
+		green += 0.025*sin( 10.0*texture2D(iChannel3,0.03*qpos.xz).x + vec3(3.0,1.0,2.0) );
+		mate.xyz = mix( mate.xyz, green, smoothstep(0.7,1.0,nor.y)*smoothstep(0.4,0.5,fbm( 0.1*qpos.zyx, nor ))*smoothstep(0.1,0.9,fbm( 10.0*qpos.zyx, nor )) );
+		
+		// lighting
+        float amb = clamp(0.4+0.6*nor.y,0.0,1.0);
+        float spe = pow(clamp(dot(-rd,nor),0.0,1.0),16.0);
+		col = mate.xyz*2.0*amb*(0.05+0.95*occ) + mate.w*spe*occ*vec3(0.3);
+	    col *= vec3(1.0,1.0,0.95);
+		
+		// fog
+		col *= 3.0*exp( -0.4*tmat.x );
 	}
 
+	// gamma
+	col = pow( col, vec3(0.45) );
+	
+	// vigneting
+	col *= 0.5 + 0.5*pow( 16.0*q.x*q.y*(1.0-q.x)*(1.0-q.y), 0.15 );
 	
     gl_FragColor = vec4( col,1.0 );
 }
