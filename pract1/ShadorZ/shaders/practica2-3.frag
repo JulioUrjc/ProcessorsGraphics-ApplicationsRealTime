@@ -127,7 +127,7 @@ void main( void ){
 
             col = brigth*sin(texture.y*NUMCELL+vec3(0.5,0.2,0.8))-spotColor*texture.x;
             col += bordTam*(2.0-smoothstep(0.0,0.12, texture.x)-smoothstep(0.0,0.04,texture.x));
-            col *= mix(vec3(0.7,0.0,0.3), col, smoothstep(0.0, 0.0, texture.x));
+            col *= mix(vec3(0.0,0.0,0.0), col, smoothstep(0.0, 0.0, texture.x));
 
             //vec3  pos = ro + tmat.x*rd;
             vec3  nor = calcNormal(pos);    
