@@ -63,15 +63,15 @@ vec3 map( in vec3 p ){
 
     float height = 0.9;
 
-    vec3 v = celular(2.0*p);
+    vec3 v = celular(p*0.5);
     float f = clamp( 3.5*(v.y-v.x), 0.0, 0.5 );
-    float d1 = length(q) - 1.0- 0.2*f*height;
+    float d1 = length(q) - 1.0 + 0.2*f*height;
     
     return vec3(d1, mix(1.0,f,height), 0.0 );
 }
 
 vec3 calcNormal( in vec3 pos ){
-    vec3 eps = vec3(0.0001,0.0,0.0);
+    vec3 eps = vec3(0.001,0.0,0.0001);
 
     return normalize( vec3(
            map(pos+eps.xyy).x - map(pos-eps.xyy).x,
@@ -79,11 +79,47 @@ vec3 calcNormal( in vec3 pos ){
            map(pos+eps.yyx).x - map(pos-eps.yyx).x ) );
 }
 
+vec3 intersect( in vec3 ro, in vec3 rd, in float h )
+{
+    float t=0.0;
+    float o;
+    float m = -1;
+    if (h>0.0)
+    {
+        vec3 res = map(ro+rd*t);
+        return vec3(res.x,res.y,res.z);
+        h = res.x;
+        o = res.y;
+        m = res.z;
+    }
+    return vec3(t,o,m);
+    // float maxd = 1.0;
+    // float precis = 0.001;
+    // float h = precis*10.0;
+    // float t = 0.0;
+    // float m = -1.0;
+    // float o = 0.0;
+    // for( int i=0; i<20; i++ )
+    // {
+    //     if( h<precis||t>maxd ) break;
+    //     t += h;
+    //     vec3 res = map( ro+rd*t );
+    //     //vec3 res;
+    //     h = res.x;
+    //     o = res.y;
+    //     m = res.z;
+    // }
+
+    // if( t>maxd ) m=-1.0;
+    // return vec3( t, o, m );
+}
+
 void main( void ){
     vec2 p = (-iResolution.xy + 2.0*gl_FragCoord.xy) / iResolution.y;
     
     // camera movement  
     float an = 0.5*iGlobalTime;
+    //float an = 0.9;
     vec3 ro = vec3( 2.5*cos(an), 1.0, 2.5*sin(an) );
     vec3 ta = vec3( 0.0, 1.0, 0.0 );
     // camera matrix
@@ -96,50 +132,54 @@ void main( void ){
     vec3 col = env_landscape(0.0, rd);
     //vec3 col;
     // sphere center    
-    vec3 sc = vec3(0.0,1.0,0.5);
+    vec3 sc = vec3(0.1,1.0,0.5);
 
     // raytrace-sphere
-    float tmin = 10000.0;
+    float tmin = 3.0;
     vec3  ce = ro - sc;
     float b = dot( rd, ce );
     float c = dot( ce, ce ) - .5;
     float h = b*b - c;
-
+    vec3 inter = intersect(ro,rd,h);
+    //h -= inter.z;
+    //h = inter.z;
     vec3  nor = vec3(0.0);
     float occ = 1.0;
     vec3  pos = vec3(0.0);
 
-    if( h>0.0 ){
+    if( h>-0.0){
         h = -b - sqrt(h);
-        if( h<tmin ) { 
+        //if( h<tmin ) { 
             tmin=h; 
             // shading/lighting
             vec3 pos = ro + tmin*rd;
-            vec3 texture = celular(pos*.5);
+            vec3 texture = celular(pos*0.5);
             //float f = celular( 1.0*pos ).x;
             //f *= occ;
             //texture.x=texture.x;
             //col = vec3(texture.x, texture.x, texture.x);
            
             float brigth = 0.8;  // Brillo 
-            float bordTam=0.9;   // Tamaño del borde
-            float spotColor=0.1; // Como de plano es el color 0 plano o tesela
+            float bordTam=1.9;   // Tamaño del borde
+            float spotColor=0.8; // Como de plano es el color 0 plano o tesela
 
             col = brigth*sin(texture.y*NUMCELL+vec3(0.5,0.2,0.8))-spotColor*texture.x;
             col += bordTam*(2.0-smoothstep(0.0,0.12, texture.x)-smoothstep(0.0,0.04,texture.x));
             col *= mix(vec3(0.0,0.0,0.0), col, smoothstep(0.0, 0.0, texture.x));
 
             //vec3  pos = ro + tmat.x*rd;
-            vec3  nor = calcNormal(pos);    
+            vec3  nor = calcNormal(pos);
+            vec3 reflection = reflect(rd,nor);
+            col += env_landscape(0.0, reflection*.5);    
             vec3 mate = vec3(0.7,0.57,0.5);     
-            col *= mix( mate, (.2), smoothstep(0.7,1.0,nor.y)*smoothstep(0.4,0.5,0.5)*smoothstep(0.1,0.9,.5));
+            col *= mix( mate, (.2), smoothstep(0.7,1.0,nor.y));
             
             //col += vec3(texture.x*1.2);
             //col *= mix( col, vec3(0.9), 1.0-exp( -0.003*tmin*tmin ) );
             //vec3 normal_s = pos-ce;
             //vec3 reflection = reflect(rd,normal_s);
             //col = vec3(texture.x);
-        }
+        //}
     }
  
     gl_FragColor = vec4( col, 1.0 );
