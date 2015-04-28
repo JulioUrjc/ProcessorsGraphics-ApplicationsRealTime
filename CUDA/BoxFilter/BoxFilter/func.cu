@@ -1,4 +1,3 @@
-//Autor: Daniel Lobo
 //****************************************************************************
 // Also note that we've supplied a helpful debugging function called checkCudaErrors.
 // You should wrap your allocation and copying statements like we've done in the
@@ -17,11 +16,10 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 #include <cuda_runtime_api.h>
-#include <math.h>
-#include <algorithm>  
-#include "device_launch_parameters.h"
 
 #define checkCudaErrors(val) check( (val), #val, __FILE__, __LINE__)
+
+#define BLOCK_SIZE 32
 
 template<typename T>
 void check(T err, const char* const func, const char* const file, const int line) {
@@ -32,61 +30,47 @@ void check(T err, const char* const func, const char* const file, const int line
 	}
 }
 
-const int BLOCKSIZE = 16;
-
 __global__
 void box_filter(const unsigned char* const inputChannel,
 unsigned char* const outputChannel,
 int numRows, int numCols,
 const float* const filter, const int filterWidth)
 {
-
-	//Indices globales de la imagen del pixel actual
-	int x = blockDim.x * blockIdx.x + threadIdx.x;
-	int y = blockDim.y * blockIdx.y + threadIdx.y;
-
-	//Retorna si el indice esta fuera del rango de la imagen
-	if (x >= numCols || y >= numRows)
-		return;
-
-	//Tamaño del radio del filtro 
-	const unsigned int kRadio = filterWidth / 2;
-
-	float intensity = 0.0f;
-
-	for (int i = 0; i<filterWidth; ++i)
-	{
-		//Se actualiza el índice X de pixel
-		x = blockDim.x * blockIdx.x + (threadIdx.x + i - kRadio);
-
-		//Clamp en X
-		if (x<0) x = 0;
-		if (x>numCols - 1) x = numCols - 1;
-
-		for (int j = 0; j<filterWidth; ++j)
-		{
-			//Se actualiza el índice Y de pixel
-			y = blockDim.y * blockIdx.y + (threadIdx.y + j - kRadio);
-
-			//Clamp en Y
-			if (y<0) y = 0;
-			if (y>numRows - 1) y = numRows - 1;
-
-			intensity += filter[j * filterWidth + i] * inputChannel[y * numCols + x];
-		}
-	}
-
-	//Pixel actual
-	x = blockDim.x * blockIdx.x + threadIdx.x;
-	y = blockDim.y * blockIdx.y + threadIdx.y;
-
-
-	outputChannel[y * numCols + x] = intensity;
-
-
-
 	// NOTA: Que un thread tenga una posición correcta en 2D no quiere decir que al aplicar el filtro
 	// los valores de sus vecinos sean correctos, ya que pueden salirse de la imagen.
+
+	/// which thread is this?
+	const int tx = blockIdx.x*blockDim.x + threadIdx.x;
+	const int ty = blockIdx.y*blockDim.y + threadIdx.y;
+
+	/// if thread is out the image
+	if (tx >= numCols || ty >= numRows)
+		return;
+
+	const unsigned int filterRadius = filterWidth / 2;
+
+	float value = 0.0f;
+
+	///
+	for (int i = 0; i < filterWidth; ++i){
+		/// which pixel is?
+		int fx = blockIdx.x*blockDim.x + (threadIdx.x + i - filterRadius);
+		/// Clamp of neighbourds values
+		if (fx < 0)  fx = 0;
+		if (fx > numCols - 1)  fx = numCols - 1;
+
+		for (int j = 0; j < filterWidth; ++j){
+			/// which pixel is?
+			int fy = blockIdx.y*blockDim.y + (threadIdx.y + j - filterRadius);
+			/// Clamp of neighbourds values
+			if (fy < 0)  fy = 0;
+			if (fy > numRows - 1)  fy = numRows - 1;
+			/// Compute the value at the pixel and add it.
+			value += filter[j*filterWidth + i] * inputChannel[fy*numCols + fx];
+		}
+	}
+	/// Save the value at the outputChanel
+	outputChannel[ty*numCols + tx] = value;
 }
 
 //This kernel takes in an image represented as a uchar4 and splits
@@ -99,21 +83,21 @@ unsigned char* const redChannel,
 unsigned char* const greenChannel,
 unsigned char* const blueChannel)
 {
-	//Indices globales de la imagen
-	int x = blockDim.x * blockIdx.x + threadIdx.x;
-	int y = blockDim.y * blockIdx.y + threadIdx.y;
+	/// which thread is this?
+	const int tx = blockIdx.x*blockDim.x + threadIdx.x;
+	const int ty = blockIdx.y*blockDim.y + threadIdx.y;
 
-	//Retorna si el indice esta fuera del rango de la imagen
-	if (x >= numCols || y >= numRows)
+	/// if thread is out the image
+	if (tx >= numCols || ty >= numRows)
 		return;
 
-	//Indice para acceder al array
-	int id = y * numCols + x;
+	/// Index to get the array position
+	const int index = ty * numCols + tx;
 
-	//Se separan los canales
-	redChannel[id] = inputImageRGBA[id].x;
-	greenChannel[id] = inputImageRGBA[id].y;
-	blueChannel[id] = inputImageRGBA[id].z;
+	/// split colors
+	redChannel[index] = inputImageRGBA[index].x;
+	greenChannel[index] = inputImageRGBA[index].y;
+	blueChannel[index] = inputImageRGBA[index].z;
 
 }
 
@@ -149,7 +133,8 @@ int numCols)
 }
 
 unsigned char *d_red, *d_green, *d_blue;
-float         *d_filter;
+float         *dg_filter;
+__constant__ float         *d_filter;
 
 void allocateMemoryAndCopyToGPU(const size_t numRowsImage, const size_t numColsImage,
 	const float* const h_filter, const size_t filterWidth)
@@ -160,29 +145,45 @@ void allocateMemoryAndCopyToGPU(const size_t numRowsImage, const size_t numColsI
 	checkCudaErrors(cudaMalloc(&d_green, sizeof(unsigned char) * numRowsImage * numColsImage));
 	checkCudaErrors(cudaMalloc(&d_blue, sizeof(unsigned char) * numRowsImage * numColsImage));
 
-	const int FILTER_BYTES = sizeof(float) * filterWidth* filterWidth;
-
-	//// Se reserva memoria para el filtro en GPU: d_filter
-	//checkCudaErrors(cudaMalloc(&d_filter,   FILTER_BYTES));
-
-	//// Se copia el filtro  (h_filter) a memoria global de la GPU (d_filter)
-	//checkCudaErrors(cudaMemcpy(d_filter,h_filter, FILTER_BYTES, cudaMemcpyHostToDevice));
-
-	// Se reserva espacio en la memoria de constantes para el filtro: d_filter
-	checkCudaErrors(cudaMalloc(&d_filter, FILTER_BYTES));
-
-	// Se copia el filtro  (h_filter) a memoria global de la GPU (d_filter)
-	checkCudaErrors(cudaMemcpy(d_filter, h_filter, FILTER_BYTES, cudaMemcpyHostToDevice));
+	//Reservar memoria para el filtro en GPU: d_filter, la cual ya esta declarada
+	// Copiar el filtro  (h_filter) a memoria global de la GPU (d_filter)
+	checkCudaErrors(cudaMalloc(&d_filter, sizeof(float)*filterWidth*filterWidth));
+	checkCudaErrors(cudaMemcpy(d_filter, h_filter, sizeof(float)*filterWidth*filterWidth, cudaMemcpyHostToDevice));
+	//checkCudaErrors(cudaMemcpyToSymbol(d_filter, h_filter, sizeof(float)*filterWidth*filterWidth));
 }
 
 
 void create_filter(float **h_filter, int *filterWidth){
 
-	const int KernelWidth = 5;
+	const int KernelWidth = 5; //OJO CON EL TAMAÑO DEL FILTRO//
+	//const int KernelWidth = 3;
 	*filterWidth = KernelWidth;
 
 	//create and fill the filter we will convolve with
 	*h_filter = new float[KernelWidth * KernelWidth];
+
+	/*
+	//Filtro gaussiano: blur
+	const float KernelSigma = 2.;
+
+	float filterSum = 0.f; //for normalization
+
+	for (int r = -KernelWidth/2; r <= KernelWidth/2; ++r) {
+	for (int c = -KernelWidth/2; c <= KernelWidth/2; ++c) {
+	float filterValue = expf( -(float)(c * c + r * r) / (2.f * KernelSigma * KernelSigma));
+	(*h_filter)[(r + KernelWidth/2) * KernelWidth + c + KernelWidth/2] = filterValue;
+	filterSum += filterValue;
+	}
+	}
+
+	float normalizationFactor = 1.f / filterSum;
+
+	for (int r = -KernelWidth/2; r <= KernelWidth/2; ++r) {
+	for (int c = -KernelWidth/2; c <= KernelWidth/2; ++c) {
+	(*h_filter)[(r + KernelWidth/2) * KernelWidth + c + KernelWidth/2] *= normalizationFactor;
+	}
+	}
+	*/
 
 	//Laplaciano 5x5
 	(*h_filter)[0] = 0;   (*h_filter)[1] = 0;    (*h_filter)[2] = -1.;  (*h_filter)[3] = 0;    (*h_filter)[4] = 0;
@@ -191,46 +192,113 @@ void create_filter(float **h_filter, int *filterWidth){
 	(*h_filter)[15] = 1.; (*h_filter)[16] = -1.; (*h_filter)[17] = -2.; (*h_filter)[18] = -1.; (*h_filter)[19] = 0;
 	(*h_filter)[20] = 0;  (*h_filter)[21] = 0;   (*h_filter)[22] = -1.; (*h_filter)[23] = 0;   (*h_filter)[24] = 0;
 
+	//Crear los filtros segun necesidad
+	//NOTA: cuidado al establecer el tamaño del filtro a utilizar
 
-	////Nitidez 3x3 - Filtro de paso alto 3x3 - KernelWidth = 3
-	//(*h_filter)[0] = -1.;   (*h_filter)[1] = -1.;	(*h_filter)[2] = -1.;  
-	//(*h_filter)[3] = -1.;	(*h_filter)[4] =  9.;	(*h_filter)[5] = -1.; 
-	//(*h_filter)[6] = -1.;	(*h_filter)[7] = -1.;	(*h_filter)[8] = -1.; 
+	//////// FILTROS DE NITIDEZ
+	///Nitidez 5x5 - kernelWidth = 5
+	//(*h_filter)[0] = 0;		(*h_filter)[1] = -1.;	(*h_filter)[2] = -1.;  (*h_filter)[3] = -1.;	(*h_filter)[4] = 0;
+	//(*h_filter)[5] = -1.;	(*h_filter)[6] = 2.;	(*h_filter)[7] = -4.;  (*h_filter)[8] = 2.;		(*h_filter)[9] = -1.;
+	//(*h_filter)[10] = -1.;	(*h_filter)[11] = -4.;	(*h_filter)[12] = 13.; (*h_filter)[13] = -4.;	(*h_filter)[14] = -1.;
+	//(*h_filter)[15] = -1.;	(*h_filter)[16] = 2.;	(*h_filter)[17] = -4.; (*h_filter)[18] = 2.;	(*h_filter)[19] = -1.;
+	//(*h_filter)[20] = 0;	(*h_filter)[21] = -1.;  (*h_filter)[22] = -1.; (*h_filter)[23] = -1.;   (*h_filter)[24] = 0;
 
-	////Deteccion de bordes - Sobel horizontal - KernelWidth = 3
-	//(*h_filter)[0] = -1.;   (*h_filter)[1] = -2.;	(*h_filter)[2] = -1.;  
-	//(*h_filter)[3] =  0.;	(*h_filter)[4] =  0.;	(*h_filter)[5] =  0.; 
-	//(*h_filter)[6] =  1.;	(*h_filter)[7] =  2.;	(*h_filter)[8] =  1.; 
+	/// Nitidez 3x3
+	//(*h_filter)[0] = -1.;	(*h_filter)[1] = -1.;	(*h_filter)[2] = -1.;  
+	//(*h_filter)[3] = -1.;	(*h_filter)[4] = 9.;	(*h_filter)[5] = -1.;	
+	//(*h_filter)[6] = -1.;	(*h_filter)[7] = -1.;	(*h_filter)[8] = -1.;
 
+	/// Aumentar nitidez
+	//(*h_filter)[0] = 0.;	(*h_filter)[1] = -0.25;	(*h_filter)[2] = 0.;
+	//(*h_filter)[3] = -0.25;	(*h_filter)[4] = 2.;	(*h_filter)[5] = -0.25;
+	//(*h_filter)[6] = 0.;	(*h_filter)[7] = -0.25;	(*h_filter)[8] = 0.;
 
-	//Filtro media
+	/// Aumentar nitidez 2
+	//(*h_filter)[0] = -0.25;	(*h_filter)[1] = -0.25;	(*h_filter)[2] = -0.25;
+	//(*h_filter)[3] = -0.25;	(*h_filter)[4] = 3.;	(*h_filter)[5] = -0.25;
+	//(*h_filter)[6] = -0.25;	(*h_filter)[7] = -0.25;	(*h_filter)[8] = -0.25;
+
+	//////// FILTROS DE GRADIENTE
+	/// Gradiente este
+	//(*h_filter)[0] = 1.;	(*h_filter)[1] = 0.;	(*h_filter)[2] = 1.;
+	//(*h_filter)[3] = 2.;	(*h_filter)[4] = 0.;	(*h_filter)[5] = -2.;
+	//(*h_filter)[6] = 1.;	(*h_filter)[7] = 0.;	(*h_filter)[8] = -1.;
+
+	/// Gradiente norte
+	//(*h_filter)[0] = -1.;	(*h_filter)[1] = -2.;	(*h_filter)[2] = -1.;
+	//(*h_filter)[3] = 0.;	(*h_filter)[4] = 0.;	(*h_filter)[5] = 0.;
+	//(*h_filter)[6] = 1.;	(*h_filter)[7] = 2.;	(*h_filter)[8] = 1.;
+
+	/// Gradiente nordeste
+	//(*h_filter)[0] = 0.;	(*h_filter)[1] = -1.;	(*h_filter)[2] = -2.;
+	//(*h_filter)[3] = 1.;	(*h_filter)[4] = 0.;	(*h_filter)[5] = -1.;
+	//(*h_filter)[6] = 2.;	(*h_filter)[7] = 1.;	(*h_filter)[8] = 0.;
+
+	/// Gradiente noroeste
+	//(*h_filter)[0] = -2.;	(*h_filter)[1] = -1.;	(*h_filter)[2] = 0.;
+	//(*h_filter)[3] = -1.;	(*h_filter)[4] = 0.;	(*h_filter)[5] = 1.;
+	//(*h_filter)[6] = 0.;	(*h_filter)[7] = 1.;	(*h_filter)[8] = 2.;
+
+	/// Gradiente sur
+	//(*h_filter)[0] = 1.;	(*h_filter)[1] = 2.;	(*h_filter)[2] = 1.;
+	//(*h_filter)[3] = 0.;	(*h_filter)[4] = 0.;	(*h_filter)[5] = 0.;
+	//(*h_filter)[6] = -1.;	(*h_filter)[7] = -2.;	(*h_filter)[8] = -1.;
+
+	/// Gradiente oeste
+	//(*h_filter)[0] = -1.;	(*h_filter)[1] = 0.;	(*h_filter)[2] = 1.;
+	//(*h_filter)[3] = -2.;	(*h_filter)[4] = 0.;	(*h_filter)[5] = 2.;
+	//(*h_filter)[6] = -1.;	(*h_filter)[7] = 0.;	(*h_filter)[8] = 1.;
+
+	//////// FILTROS DE DETECCION DE LINEA
+	/// Deteccion de linea horizontal
+	//(*h_filter)[0] = -1.;	(*h_filter)[1] = -1.;	(*h_filter)[2] = -1.;
+	//(*h_filter)[3] = 2.;	(*h_filter)[4] = 2.;	(*h_filter)[5] = 2.;
+	//(*h_filter)[6] = -1.;	(*h_filter)[7] = -1.;	(*h_filter)[8] = -1.;
+
+	/// Deteccion de linea diagonal izquierda
+	//(*h_filter)[0] = 2.;	(*h_filter)[1] = -1.;	(*h_filter)[2] = -1.;
+	//(*h_filter)[3] = -1.;	(*h_filter)[4] = 2.;	(*h_filter)[5] = -1.;
+	//(*h_filter)[6] = -1.;	(*h_filter)[7] = -1.;	(*h_filter)[8] = 2.;
+
+	/// Deteccion de linea diagonal derecha
+	//(*h_filter)[0] = -1.;	(*h_filter)[1] = -1.;	(*h_filter)[2] = 2.;
+	//(*h_filter)[3] = -1.;	(*h_filter)[4] = 2.;	(*h_filter)[5] = -1.;
+	//(*h_filter)[6] = 2.;	(*h_filter)[7] = -1.;	(*h_filter)[8] = -1.;
+
+	/// Deteccion de linea vertical
+	//(*h_filter)[0] = -1.;	(*h_filter)[1] = 2.;	(*h_filter)[2] = -1.;
+	//(*h_filter)[3] = -1.;	(*h_filter)[4] = 2.;	(*h_filter)[5] = -1.;
+	//(*h_filter)[6] = -1.;	(*h_filter)[7] = 2.;	(*h_filter)[8] = -1.;
+
+	//////// FILTROS DE SUAVIZADO
+	/// Media Aritmetica Suave - estandar 3x3
+	//(*h_filter)[0] = 0.111;	(*h_filter)[1] = 0.111;	(*h_filter)[2] = 0.111;
+	//(*h_filter)[3] = 0.111;	(*h_filter)[4] = 0.111;	(*h_filter)[5] = 0.111;
+	//(*h_filter)[6] = 0.111;	(*h_filter)[7] = 0.111;	(*h_filter)[8] = 0.111;
+	/// Media Aritmetica Suave - generica NxN
 	//float value = 1/(float)(KernelWidth*KernelWidth);
 	//for (int i = 0; i < KernelWidth; ++i)
 	//	for (int j = 0; j < KernelWidth; ++j)
 	//		(*h_filter)[i + KernelWidth * j] = value;
 
+	/// Suavizado 3x3
+	//(*h_filter)[0] = 1.;	(*h_filter)[1] = 2.;	(*h_filter)[2] = 1.;
+	//(*h_filter)[3] = 2.;	(*h_filter)[4] = 4.;	(*h_filter)[5] = 2.;
+	//(*h_filter)[6] = 1.;	(*h_filter)[7] = 2.;	(*h_filter)[8] = 1.;
 
+	/// Suavizado 5x5
+	//(*h_filter)[0] = 1.;	(*h_filter)[1] = 1.;    (*h_filter)[2] = 1.;	(*h_filter)[3] = 1.;    (*h_filter)[4] = 1.;
+	//(*h_filter)[5] = 1.;	(*h_filter)[6] = 4.;	(*h_filter)[7] = 4.;	(*h_filter)[8] = 4.;	(*h_filter)[9] = 1.;
+	//(*h_filter)[10] = 1.;	(*h_filter)[11] = 4.;	(*h_filter)[12] = 12.;	(*h_filter)[13] = 4.;	(*h_filter)[14] = 1.;
+	//(*h_filter)[15] = 1.;	(*h_filter)[16] = 4.;	(*h_filter)[17] = 4.;	(*h_filter)[18] = 4.;	(*h_filter)[19] = 1.;
+	//(*h_filter)[20] = 1.;	(*h_filter)[21] = 1.;   (*h_filter)[22] = 1.;	(*h_filter)[23] = 1.;   (*h_filter)[24] = 1.;
 
-	// //Filtro gaussiano: blur
-	// const float KernelSigma = 2.;
-
-	// float filterSum = 0.f; //for normalization
-
-	// for (int r = -KernelWidth/2; r <= KernelWidth/2; ++r) {
-	//for (int c = -KernelWidth/2; c <= KernelWidth/2; ++c) {
-	//  float filterValue = expf( -(float)(c * c + r * r) / (2.f * KernelSigma * KernelSigma));
-	//  (*h_filter)[(r + KernelWidth/2) * KernelWidth + c + KernelWidth/2] = filterValue;
-	//  filterSum += filterValue;
-	//}
-	// }
-
-	// float normalizationFactor = 1.f / filterSum;
-
-	// for (int r = -KernelWidth/2; r <= KernelWidth/2; ++r) {
-	//for (int c = -KernelWidth/2; c <= KernelWidth/2; ++c) {
-	//  (*h_filter)[(r + KernelWidth/2) * KernelWidth + c + KernelWidth/2] *= normalizationFactor;
-	//}
-	// }
+	//////// FILTROS DE SUAVIZADO
+	/// Media Aritmetica Suave
+	//(*h_filter)[0] = 0.111;	(*h_filter)[1] = 0.111;	(*h_filter)[2] = 0.111;
+	//(*h_filter)[3] = 0.111;	(*h_filter)[4] = 0.111;	(*h_filter)[5] = 0.111;
+	//(*h_filter)[6] = 0.111;	(*h_filter)[7] = 0.111;	(*h_filter)[8] = 0.111;
+ 
 
 }
 
@@ -242,23 +310,15 @@ void convolution(const uchar4 * const h_inputImageRGBA, uchar4 * const d_inputIm
 	unsigned char *d_blueFiltered,
 	const int filterWidth)
 {
-	//Se calcula el tamaño de bloque
-	//Mi tarjeta es GeForce 230M con un maximo de 512 threads por bloque
-	const dim3 blockSize(BLOCKSIZE, BLOCKSIZE);
+	/// Calcular tamaños de bloque
+	//	La tarjeta tiene un maximo de 1024 threads por bloque, por tanto el tamanyo de bloque es de 32
+	const dim3 gridSize((numCols-1) / BLOCK_SIZE+1, (numRows-1) / BLOCK_SIZE+1, 1);
+	const dim3 blockSize(BLOCK_SIZE, BLOCK_SIZE, 1);
 
-	//Se calculan las dimensiones del grid
-	const unsigned int xGridSize = ceil((float)numCols / (float)blockSize.x);
-	const unsigned int yGridSize = ceil((float)numRows / (float)blockSize.y);
-	const dim3 gridSize(xGridSize, yGridSize);
+	/// Lanzar kernel para separar imagenes RGBA en diferentes colores
+	separateChannels << <gridSize, blockSize >> >(d_inputImageRGBA, numRows, numCols, d_red, d_green, d_blue);
 
-
-	//Se lanza el kernel para separar imagenes RGBA en diferentes colores
-	separateChannels << <gridSize, blockSize >> >(d_inputImageRGBA, numRows, numCols,
-		d_red,
-		d_green,
-		d_blue);
-
-	//Se ejecuta la convolución. Una por canal
+	//Ejecutar convolución. Una por canal
 	box_filter << <gridSize, blockSize >> >(d_red, d_redFiltered, numRows, numCols, d_filter, filterWidth);
 	box_filter << <gridSize, blockSize >> >(d_green, d_greenFiltered, numRows, numCols, d_filter, filterWidth);
 	box_filter << <gridSize, blockSize >> >(d_blue, d_blueFiltered, numRows, numCols, d_filter, filterWidth);
@@ -271,13 +331,15 @@ void convolution(const uchar4 * const h_inputImageRGBA, uchar4 * const d_inputIm
 		numRows,
 		numCols);
 	cudaDeviceSynchronize(); checkCudaErrors(cudaGetLastError());
+
 }
 
 
 //Free all the memory that we allocated
-//TODO: make sure you free any arrays that you allocated
+//make sure you free any arrays that you allocated
 void cleanup() {
 	checkCudaErrors(cudaFree(d_red));
 	checkCudaErrors(cudaFree(d_green));
 	checkCudaErrors(cudaFree(d_blue));
+	checkCudaErrors(cudaFree(d_filter));
 }
