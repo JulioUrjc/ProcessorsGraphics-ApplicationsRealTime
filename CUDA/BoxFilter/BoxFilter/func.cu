@@ -30,31 +30,70 @@ void check(T err, const char* const func, const char* const file, const int line
 	}
 }
 
+// Optimize for pointer aliasing using __restrict__ allows CUDA commpiler to use the read-only data cache and improves performance
 __global__
-void box_filter(const unsigned char* const inputChannel,
-unsigned char* const outputChannel,
-int numRows, int numCols,
-const float* const filter, const int filterWidth)
+void box_filter(const unsigned char* const inputChannel, unsigned char* const outputChannel, int numRows, int numCols, const float* __restrict__ filter, const int filterWidth)
 {
 	// NOTA: Que un thread tenga una posición correcta en 2D no quiere decir que al aplicar el filtro
 	// los valores de sus vecinos sean correctos, ya que pueden salirse de la imagen.
 
+	const unsigned int x = threadIdx.x;
+	const unsigned int y = threadIdx.y;
+
 	/// which thread is this?
-	const int tx = blockIdx.x*blockDim.x + threadIdx.x;
-	const int ty = blockIdx.y*blockDim.y + threadIdx.y;
+	const int tx = blockIdx.x*blockDim.x + x;
+	const int ty = blockIdx.y*blockDim.y + y;
 
 	/// if thread is out the image
 	if (tx >= numCols || ty >= numRows)
 		return;
 
-	const unsigned int filterRadius = filterWidth / 2;
-
+	const int filterRadius = filterWidth / 2;
 	float value = 0.0f;
 
-	///
+	/// Share memory
+	__shared__ float ds_inputChannel[BLOCK_SIZE][BLOCK_SIZE];
+
+	ds_inputChannel[y][x] = inputChannel[ty*numCols + tx];
+	// case1: upper left
+	//x = tx - filterRadius;
+	//y = ty - filterRadius;
+	//if (x < 0 || y < 0)
+	//	ds_inputChannel[threadIdx.y][threadIdx.x] = 0;
+	//else
+	//	ds_inputChannel[threadIdx.y][threadIdx.x] = inputChannel[ty*numCols + tx - filterRadius - numCols*filterRadius];
+
+	//// case2: upper right
+	//x = tx + filterRadius;
+	//y = ty - filterRadius;
+	//if (x > numCols - 1 || y < 0)
+	//	ds_inputChannel[threadIdx.y][threadIdx.x + blockDim.x] = 0;
+	//else
+	//	ds_inputChannel[threadIdx.y][threadIdx.x + blockDim.x] = inputChannel[ty*numCols + tx + filterRadius - numCols*filterRadius];
+
+	//// case3: lower left
+	//x = tx - filterRadius;
+	//y = ty + filterRadius;
+	//if (x < 0 || y > numRows - 1)
+	//	ds_inputChannel[threadIdx.y + blockDim.y][threadIdx.x] = 0;
+	//else
+	//	ds_inputChannel[threadIdx.y + blockDim.y][threadIdx.x] = inputChannel[ty*numCols + tx - filterRadius + numCols*filterRadius];
+
+	//// case4: lower right
+	//x = tx + filterRadius;
+	//y = ty + filterRadius;
+	//if (x > numCols - 1 || y > numRows - 1)
+	//	ds_inputChannel[threadIdx.y + blockDim.y][threadIdx.x + blockDim.x] = 0;
+	//else
+	//	ds_inputChannel[threadIdx.y + blockDim.y][threadIdx.x + blockDim.x] = inputChannel[ty*numCols + tx + filterRadius - numCols*filterRadius];
+
+	__syncthreads();
+
 	for (int i = 0; i < filterWidth; ++i){
 		/// which pixel is?
+		//int fx = blockIdx.x*blockDim.x + (threadIdx.x + i - filterRadius);
 		int fx = blockIdx.x*blockDim.x + (threadIdx.x + i - filterRadius);
+		int fsx = x + i - filterRadius;
 		/// Clamp of neighbourds values
 		if (fx < 0)  fx = 0;
 		if (fx > numCols - 1)  fx = numCols - 1;
@@ -62,13 +101,37 @@ const float* const filter, const int filterWidth)
 		for (int j = 0; j < filterWidth; ++j){
 			/// which pixel is?
 			int fy = blockIdx.y*blockDim.y + (threadIdx.y + j - filterRadius);
+			int fsy = y + j - filterRadius;
 			/// Clamp of neighbourds values
 			if (fy < 0)  fy = 0;
 			if (fy > numRows - 1)  fy = numRows - 1;
 			/// Compute the value at the pixel and add it.
-			value += filter[j*filterWidth + i] * inputChannel[fy*numCols + fx];
+			if ((fsx >= 0) && (fsy >= 0) && (fsx <= BLOCK_SIZE - 1) && (fsy <= BLOCK_SIZE - 1))
+				value += filter[j*filterWidth + i] * ds_inputChannel[fsy][fsx];
+			else
+				value += filter[j*filterWidth + i] * inputChannel[fy*numCols + fx];
 		}
 	}
+
+	/// Whitout share memory
+	//for (int i = 0; i < filterWidth; ++i){
+	//	/// which pixel is?
+	//	int fx = blockIdx.x*blockDim.x + (threadIdx.x + i - filterRadius);
+	//	/// Clamp of neighbourds values
+	//	if (fx < 0)  fx = 0;
+	//	if (fx > numCols - 1)  fx = numCols - 1;
+
+	//	for (int j = 0; j < filterWidth; ++j){
+	//		/// which pixel is?
+	//		int fy = blockIdx.y*blockDim.y + (threadIdx.y + j - filterRadius);
+	//		/// Clamp of neighbourds values
+	//		if (fy < 0)  fy = 0;
+	//		if (fy > numRows - 1)  fy = numRows - 1;
+	//		/// Compute the value at the pixel and add it.
+	//		value += filter[j*filterWidth + i] * inputChannel[fy*numCols + fx];
+	//	}
+	//}
+
 	/// Save the value at the outputChanel
 	outputChannel[ty*numCols + tx] = value;
 }
@@ -133,7 +196,7 @@ int numCols)
 }
 
 unsigned char *d_red, *d_green, *d_blue;
-float         *dg_filter;
+//float         *d_filter;
 __constant__ float         *d_filter;
 
 void allocateMemoryAndCopyToGPU(const size_t numRowsImage, const size_t numColsImage,
