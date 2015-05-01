@@ -19,8 +19,7 @@ void check(T err, const char* const func, const char* const file, const int line
 
 /// Reduction kernel to find the min and max value of an Array
 __global__
-void findMinMax(const float *d_in_min, const float *d_in_max, float *d_out_min, float *d_out_max)
-{
+void findMinMax(const float *d_in_min, const float *d_in_max, float *d_out_min, float *d_out_max){
 	/// Share memory
 	__shared__ float ds_min[BLOCK_SIZE];
 	__shared__ float ds_max[BLOCK_SIZE];
@@ -36,13 +35,10 @@ void findMinMax(const float *d_in_min, const float *d_in_max, float *d_out_min, 
 
 	__syncthreads();
 
-	while (totalThreads > 1)
-	{
+	while (totalThreads > 1){
 		int halfPoint = (totalThreads >> 1);	// divide by two
-		// only the first half of the threads will be active.
 
-		if (threadIdx.x < halfPoint)
-		{
+		if (threadIdx.x < halfPoint){
 			t2 = threadIdx.x + halfPoint;
 
 			// Get the shared value stored by another thread
@@ -64,7 +60,68 @@ void findMinMax(const float *d_in_min, const float *d_in_max, float *d_out_min, 
 		d_out_min[blockIdx.x] = ds_min[0];
 		d_out_max[blockIdx.x] = ds_max[0];
 	}
+}
 
+/// Kernel to compute the histogram
+__global__
+void computeHistogram(const float* lumi, int* histogram, const float min, const float range, const int bins){
+	
+	/// which thread is?
+	int t = blockIdx.x * blockDim.x + threadIdx.x;
+
+	//Compute bin
+	int bin = ((lumi[t] - min) / range)*bins;
+
+	//Incremento en el bin calculado
+	atomicAdd(&(histogram[bin]), 1);
+}
+
+__global__
+void exclusiveScan(unsigned int* numberArray, int texSize){
+	__shared__ int tempArray[BLOCK_SIZE * 2];
+	int id = blockIdx.x*blockDim.x + threadIdx.x;
+	int threadId = threadIdx.x;
+	int offset = 1;
+	int temp;
+	int ai = threadId;
+	int bi = threadId + texSize / 2;
+	int i;
+	//assign the shared memory
+	tempArray[ai] = numberArray[id];
+	tempArray[bi] = numberArray[id + texSize / 2];
+
+	//up tree
+	for (i = texSize >> 1; i > 0; i >>= 1){
+		__syncthreads();
+		if (threadId < i){
+			ai = offset*(2 * threadId + 1) - 1;
+			bi = offset*(2 * threadId + 2) - 1;
+			tempArray[bi] += tempArray[ai];
+		}
+		offset <<= 1;
+	}
+
+	//put the last one 0
+	if (threadId == 0)
+		tempArray[texSize - 1] = 0;
+
+	//down tree
+	for (i = 1; i < texSize; i <<= 1){//traverse down tree & build scan
+		offset >>= 1;
+		__syncthreads();
+
+		if (threadId < i){
+			ai = offset*(2 * threadId + 1) - 1;
+			bi = offset*(2 * threadId + 2) - 1;
+			temp = tempArray[ai];
+			tempArray[ai] = tempArray[bi];
+			tempArray[bi] += temp;
+		}
+	}
+	__syncthreads();
+
+	numberArray[id] = tempArray[threadId];
+	numberArray[id + texSize / 2] = tempArray[threadId + texSize / 2];
 }
 
 void calculate_cdf(const float* const d_logLuminance, unsigned int* const d_cdf, float &min_logLum, float &max_logLum, const size_t numRows, const size_t numCols, const size_t numBins)
@@ -80,10 +137,11 @@ void calculate_cdf(const float* const d_logLuminance, unsigned int* const d_cdf,
 	checkCudaErrors(cudaMalloc(&d_min, sizeof(float) * BLOCK_SIZE));
 	checkCudaErrors(cudaMalloc(&d_max, sizeof(float) * BLOCK_SIZE));
 
-	/// Execute kernels
+	/// launch the kernel which compute the max and min in each block
 	findMinMax << <gridSize, blockSize >> >(d_logLuminance, d_logLuminance, d_min, d_max);
 	printf("Raquel => min = %d  -- max = %d\n", d_min, d_max);
 
+	/// Bucle until reduce all the blocks
 	while (gridSize>1)
 	{
 		//Se reduce el tamaño del grid BLOCKSIZE veces
@@ -104,12 +162,6 @@ void calculate_cdf(const float* const d_logLuminance, unsigned int* const d_cdf,
 	checkCudaErrors(cudaMemcpy(&min_logLum, d_min_aux, sizeof(float), cudaMemcpyDeviceToHost));
 	checkCudaErrors(cudaMemcpy(&max_logLum, d_max_aux, sizeof(float), cudaMemcpyDeviceToHost));
 
-	/// Free memory
-	checkCudaErrors(cudaFree(d_min));
-	checkCudaErrors(cudaFree(d_max));
-	checkCudaErrors(cudaFree(d_min_aux));
-	checkCudaErrors(cudaFree(d_max_aux));
-
 	///	2) Obtener el rango a representar
 	float range = max_logLum - min_logLum;
 
@@ -125,8 +177,15 @@ void calculate_cdf(const float* const d_logLuminance, unsigned int* const d_cdf,
 	cudaMalloc(&d_histogram, sizeof(int)*numBins);
 	cudaMemset(d_histogram, 0, sizeof(int)*numBins);
 
+	/// Launch the kernel for compute the histogram
+	computeHistogram << <gridSize, blockSize >> >(d_logLuminance, (int*)d_cdf, min_logLum, range, numBins);
 
 	//4) Realizar un exclusive scan en el histograma para obtener la distribución acumulada (cdf)
 	//	de los valores de luminancia. Se debe almacenar en el puntero c_cdf
+	exclusiveScan << < 1, (numBins / 2) >> >(d_cdf, numBins);
 
+	///// Free memory
+	//checkCudaErrors(cudaFree(d_min));
+	//checkCudaErrors(cudaFree(d_max));
+	//checkCudaErrors(cudaFree(d_histogram));
 }
