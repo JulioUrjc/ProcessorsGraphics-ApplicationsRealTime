@@ -139,7 +139,6 @@ void calculate_cdf(const float* const d_logLuminance, unsigned int* const d_cdf,
 
 	/// launch the kernel which compute the max and min in each block
 	findMinMax << <gridSize, blockSize >> >(d_logLuminance, d_logLuminance, d_min, d_max);
-	printf("Raquel => min = %d  -- max = %d\n", d_min, d_max);
 
 	/// Bucle until reduce all the blocks
 	while (gridSize>1)
@@ -155,12 +154,11 @@ void calculate_cdf(const float* const d_logLuminance, unsigned int* const d_cdf,
 
 		d_min = d_min_aux;
 		d_max = d_max_aux;
-		
 	}
 
 	/// Copy to Host the results of max and min and clean memory
-	checkCudaErrors(cudaMemcpy(&min_logLum, d_min_aux, sizeof(float), cudaMemcpyDeviceToHost));
-	checkCudaErrors(cudaMemcpy(&max_logLum, d_max_aux, sizeof(float), cudaMemcpyDeviceToHost));
+	checkCudaErrors(cudaMemcpy(&min_logLum, d_min, sizeof(float), cudaMemcpyDeviceToHost));
+	checkCudaErrors(cudaMemcpy(&max_logLum, d_max, sizeof(float), cudaMemcpyDeviceToHost));
 
 	///	2) Obtener el rango a representar
 	float range = max_logLum - min_logLum;
@@ -184,8 +182,8 @@ void calculate_cdf(const float* const d_logLuminance, unsigned int* const d_cdf,
 	//	de los valores de luminancia. Se debe almacenar en el puntero c_cdf
 	exclusiveScan << < 1, (numBins / 2) >> >(d_cdf, numBins);
 
-	///// Free memory
-	//checkCudaErrors(cudaFree(d_min));
-	//checkCudaErrors(cudaFree(d_max));
-	//checkCudaErrors(cudaFree(d_histogram));
+	/// Free memory
+	checkCudaErrors(cudaFree(d_min));
+	checkCudaErrors(cudaFree(d_max));
+	checkCudaErrors(cudaFree(d_histogram));
 }
