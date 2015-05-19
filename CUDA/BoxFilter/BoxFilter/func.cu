@@ -54,48 +54,57 @@ void box_filter(const unsigned char* const inputChannel, unsigned char* const ou
 	float value = 0.0f;
 	
 	/// Share memory - Input tiles need to be larger than output tiles
-	//__shared__ float ds_inputChannel[BLOCK_SIZE+FILTER_WIDTH-1][BLOCK_SIZE+FILTER_WIDTH-1];
-	/// Each thread copy the vertex of the filter, the 4 corners - error some pixels
-	//int fx, fy; // Index for the filter corners
-	//// case1: upper left
-	//fx = tx - filterRadius;
-	//fy = ty - filterRadius;
+	__shared__ float ds_inputChannel[BLOCK_SIZE+FILTER_WIDTH-1][BLOCK_SIZE+FILTER_WIDTH-1];
+	// Each thread copy the vertex of the filter, the 4 corners - error some pixels
+	int fx, fy; // Index for the filter corners
+	bool baux;
+	// case1: upper left
+	fx = tx - filterRadius;
+	fy = ty - filterRadius;
+	baux = !((fx < 0) || (fy < 0));
+	ds_inputChannel[x0][y0] = inputChannel[fy*numCols + fx] * baux;
 	//if (fx < 0 || fy < 0)
 	//	ds_inputChannel[x0][y0] = 0.0f;
 	//else
 	//	ds_inputChannel[x0][y0] = inputChannel[ty*numCols + tx - filterRadius - numCols];
 
-	//// case2: upper right
-	//fx = tx + filterRadius;
-	//fy = ty - filterRadius;
+	// case2: upper right
+	fx = tx + filterRadius;
+	fy = ty - filterRadius;
+	baux = !((fx > numCols - 1) || (fy < 0));
+	ds_inputChannel[x0 + FILTER_WIDTH][y0] = inputChannel[fy*numCols + fx] * baux;
 	//if (fx > numCols-1 || fy < 0)
 	//	ds_inputChannel[x0 + FILTER_WIDTH][y0] = 0.0f;
 	//else
 	//	ds_inputChannel[x0 + FILTER_WIDTH][y0] = inputChannel[ty*numCols + tx + filterRadius - numCols];
 
-	//// case3: lower left
-	//fx = tx - filterRadius;
-	//fy = ty + filterRadius;
+	// case3: lower left
+	fx = tx - filterRadius;
+	fy = ty + filterRadius;
+	baux = !((fx < 0) || (fy > numRows - 1));
+	ds_inputChannel[x0][y0 + FILTER_WIDTH] = inputChannel[fy*numCols + fx] * baux;
 	//if (fx < 0 || fy > numRows-1)
 	//	ds_inputChannel[x0][y0 + FILTER_WIDTH] = 0.0f;
 	//else
 	//	ds_inputChannel[x0][y0 + FILTER_WIDTH] = inputChannel[ty*numCols + tx - filterRadius + numCols];
 
-	//// case4: lower right
-	//fx = tx + filterRadius;
-	//fy = ty + filterRadius;
+	// case4: lower right
+	fx = tx + filterRadius;
+	fy = ty + filterRadius;
+	baux = !((fx > numCols - 1) || (fy > numRows - 1));
+	ds_inputChannel[x0 + FILTER_WIDTH][y0 + FILTER_WIDTH] = inputChannel[fy*numCols + fx] * baux;
 	//if (fx > numCols - 1 || fy > numRows-1)
 	//	ds_inputChannel[x0 + FILTER_WIDTH][y0 + FILTER_WIDTH] = 0.0f;
 	//else
 	//	ds_inputChannel[x0 + FILTER_WIDTH][y0 + FILTER_WIDTH] = inputChannel[ty*numCols + tx + filterRadius + numCols];
 
-	//__syncthreads(); // SyncThreads to have all the share memory complete
+	__syncthreads(); // SyncThreads to have all the share memory complete
 
-	//for (int i = 0; i < FILTER_WIDTH; ++i){
-	//	for (int j = 0; j < FILTER_WIDTH; ++j){
-	//		value += filter[j*filterWidth + i] * ds_inputChannel[x0 + i][y0 + j];
-	//	}
-	//}
+	for (int i = 0; i < FILTER_WIDTH; ++i){
+		for (int j = 0; j < FILTER_WIDTH; ++j){
+			value += filter[i*filterWidth + j] * ds_inputChannel[x0 + i][y0 + j];
+		}
+	}
 
 	///Share memory, block memory are BLOCK_SIZE
 	//__shared__ float ds_inputChannel[BLOCK_SIZE][BLOCK_SIZE];
@@ -126,23 +135,23 @@ void box_filter(const unsigned char* const inputChannel, unsigned char* const ou
 	//}
 
 	/// Whitout share memory
-	for (int i = 0; i < filterWidth; ++i){
-		/// which pixel is?
-		int fx = blockIdx.x*blockDim.x + (threadIdx.x + i - filterRadius);
-		/// Clamp of neighbourds values
-		if (fx < 0)  fx = 0;
-		if (fx > numCols - 1)  fx = numCols - 1;
+	//for (int i = 0; i < filterWidth; ++i){
+	//	/// which pixel is?
+	//	int fx = blockIdx.x*blockDim.x + (threadIdx.x + i - filterRadius);
+	//	/// Clamp of neighbourds values
+	//	if (fx < 0)  fx = 0;
+	//	if (fx > numCols - 1)  fx = numCols - 1;
 
-		for (int j = 0; j < filterWidth; ++j){
-			/// which pixel is?
-			int fy = blockIdx.y*blockDim.y + (threadIdx.y + j - filterRadius);
-			/// Clamp of neighbourds values
-			if (fy < 0)  fy = 0;
-			if (fy > numRows - 1)  fy = numRows - 1;
-			/// Compute the value at the pixel and add it.
-			value += filter[j*filterWidth + i] * inputChannel[fy*numCols + fx];
-		}
-	}
+	//	for (int j = 0; j < filterWidth; ++j){
+	//		/// which pixel is?
+	//		int fy = blockIdx.y*blockDim.y + (threadIdx.y + j - filterRadius);
+	//		/// Clamp of neighbourds values
+	//		if (fy < 0)  fy = 0;
+	//		if (fy > numRows - 1)  fy = numRows - 1;
+	//		/// Compute the value at the pixel and add it.
+	//		value += filter[j*filterWidth + i] * inputChannel[fy*numCols + fx];
+	//	}
+	//}
 
 	/// Save the value at the outputChanel
 	outputChannel[ty*numCols + tx] = value;
@@ -261,6 +270,13 @@ void create_filter(float **h_filter, int *filterWidth){
 	}
 	}
 	*/
+
+	//The same image
+	//(*h_filter)[0] = 0;		(*h_filter)[1] = 0;		(*h_filter)[2] = 0;		(*h_filter)[3] = 0;		(*h_filter)[4] = 0;
+	//(*h_filter)[5] = 0;		(*h_filter)[6] = 0;		(*h_filter)[7] = 0;		(*h_filter)[8] = 0;		(*h_filter)[9] = 0;
+	//(*h_filter)[10] = 0;	(*h_filter)[11] = 0;	(*h_filter)[12] = 1.;	(*h_filter)[13] = 0;	(*h_filter)[14] = 0;
+	//(*h_filter)[15] = 0;	(*h_filter)[16] = 0;	(*h_filter)[17] = 0;	(*h_filter)[18] = 0;	(*h_filter)[19] = 0;
+	//(*h_filter)[20] = 0;	(*h_filter)[21] = 0;	(*h_filter)[22] = 0;	(*h_filter)[23] = 0;	(*h_filter)[24] = 0;
 
 	//Laplaciano 5x5
 	(*h_filter)[0] = 0;   (*h_filter)[1] = 0;    (*h_filter)[2] = -1.;  (*h_filter)[3] = 0;    (*h_filter)[4] = 0;
@@ -394,19 +410,17 @@ void convolution(const uchar4 * const h_inputImageRGBA, uchar4 * const d_inputIm
 
 	/// Lanzar kernel para separar imagenes RGBA en diferentes colores
 	separateChannels << <gridSize, blockSize >> >(d_inputImageRGBA, numRows, numCols, d_red, d_green, d_blue);
+	cudaDeviceSynchronize();
 
 	//Ejecutar convolución. Una por canal
 	box_filter << <gridSize, blockSize >> >(d_red, d_redFiltered, numRows, numCols, d_filter, filterWidth);
 	box_filter << <gridSize, blockSize >> >(d_green, d_greenFiltered, numRows, numCols, d_filter, filterWidth);
 	box_filter << <gridSize, blockSize >> >(d_blue, d_blueFiltered, numRows, numCols, d_filter, filterWidth);
+	cudaDeviceSynchronize();
 
 	// Recombining the results. 
-	recombineChannels << <gridSize, blockSize >> >(d_redFiltered,
-		d_greenFiltered,
-		d_blueFiltered,
-		d_outputImageRGBA,
-		numRows,
-		numCols);
+	recombineChannels << <gridSize, blockSize >> >(d_redFiltered, d_greenFiltered, d_blueFiltered, d_outputImageRGBA, numRows, numCols);
+
 	cudaDeviceSynchronize(); checkCudaErrors(cudaGetLastError());
 
 }
