@@ -55,61 +55,61 @@ void box_filter(const unsigned char* const inputChannel, unsigned char* const ou
 	float value = 0.0f;
 	
 	/// Share memory - Input tiles need to be larger than output tiles
-	__shared__ float ds_inputChannel[BLOCK_SIZE+FILTER_WIDTH-1][BLOCK_SIZE+FILTER_WIDTH-1];
+	//__shared__ float ds_inputChannel[BLOCK_SIZE+FILTER_WIDTH-1][BLOCK_SIZE+FILTER_WIDTH-1];
 
-	// Each thread copy the vertex of the filter, the 4 corners - error some pixels
-	int fx, fy; // Index for the filter corners
-	bool baux;
-	// case1: upper left
-	fx = tx - filterRadius;
-	fy = ty - filterRadius;
-	baux = !((fx < 0) || (fy < 0));
-	ds_inputChannel[x0][y0] = inputChannel[fy*numCols + fx] * baux;
-	//if (fx < 0 || fy < 0)
-	//	ds_inputChannel[x0][y0] = 0.0f;
-	//else
-	//	ds_inputChannel[x0][y0] = inputChannel[ty*numCols + tx - filterRadius - numCols];
+	//// Each thread copy the vertex of the filter, the 4 corners - error some pixels
+	//int fx, fy; // Index for the filter corners
+	//bool baux;
+	//// case1: upper left
+	//fx = tx - filterRadius;
+	//fy = ty - filterRadius;
+	//baux = !((fx < 0) || (fy < 0));
+	//ds_inputChannel[x0][y0] = inputChannel[fy*numCols + fx] * baux;
+	////if (fx < 0 || fy < 0)
+	////	ds_inputChannel[x0][y0] = 0.0f;
+	////else
+	////	ds_inputChannel[x0][y0] = inputChannel[ty*numCols + tx - filterRadius - numCols];
 
-	// case2: upper right
-	fx = tx + filterRadius;
-	fy = ty - filterRadius;
+	//// case2: upper right
+	//fx = tx + filterRadius;
+	//fy = ty - filterRadius;
 
-	baux = !((fx > numCols - 1) || (fy < 0));
-	ds_inputChannel[x0 + FILTER_WIDTH][y0] = inputChannel[fy*numCols + fx] * baux;
-	//if (fx > numCols-1 || fy < 0)
-	//	ds_inputChannel[x0 + FILTER_WIDTH][y0] = 0.0f;
-	//else
-	//	ds_inputChannel[x0 + FILTER_WIDTH][y0] = inputChannel[ty*numCols + tx + filterRadius - numCols];
+	//baux = !((fx > numCols - 1) || (fy < 0));
+	//ds_inputChannel[x0 + FILTER_WIDTH][y0] = inputChannel[fy*numCols + fx] * baux;
+	////if (fx > numCols-1 || fy < 0)
+	////	ds_inputChannel[x0 + FILTER_WIDTH][y0] = 0.0f;
+	////else
+	////	ds_inputChannel[x0 + FILTER_WIDTH][y0] = inputChannel[ty*numCols + tx + filterRadius - numCols];
 
-	// case3: lower left
-	fx = tx - filterRadius;
-	fy = ty + filterRadius;
+	//// case3: lower left
+	//fx = tx - filterRadius;
+	//fy = ty + filterRadius;
 
-	baux = !((fx < 0) || (fy > numRows - 1));
-	ds_inputChannel[x0][y0 + FILTER_WIDTH] = inputChannel[fy*numCols + fx] * baux;
-	//if (fx < 0 || fy > numRows-1)
-	//	ds_inputChannel[x0][y0 + FILTER_WIDTH] = 0.0f;
-	//else
-	//	ds_inputChannel[x0][y0 + FILTER_WIDTH] = inputChannel[ty*numCols + tx - filterRadius + numCols];
+	//baux = !((fx < 0) || (fy > numRows - 1));
+	//ds_inputChannel[x0][y0 + FILTER_WIDTH] = inputChannel[fy*numCols + fx] * baux;
+	////if (fx < 0 || fy > numRows-1)
+	////	ds_inputChannel[x0][y0 + FILTER_WIDTH] = 0.0f;
+	////else
+	////	ds_inputChannel[x0][y0 + FILTER_WIDTH] = inputChannel[ty*numCols + tx - filterRadius + numCols];
 
-	// case4: lower right
-	fx = tx + filterRadius;
-	fy = ty + filterRadius;
+	//// case4: lower right
+	//fx = tx + filterRadius;
+	//fy = ty + filterRadius;
 
-	baux = !((fx > numCols - 1) || (fy > numRows - 1));
-	ds_inputChannel[x0 + FILTER_WIDTH][y0 + FILTER_WIDTH] = inputChannel[fy*numCols + fx] * baux;
-	//if (fx > numCols - 1 || fy > numRows-1)
-	//	ds_inputChannel[x0 + FILTER_WIDTH][y0 + FILTER_WIDTH] = 0.0f;
-	//else
-	//	ds_inputChannel[x0 + FILTER_WIDTH][y0 + FILTER_WIDTH] = inputChannel[ty*numCols + tx + filterRadius + numCols];
+	//baux = !((fx > numCols - 1) || (fy > numRows - 1));
+	//ds_inputChannel[x0 + FILTER_WIDTH][y0 + FILTER_WIDTH] = inputChannel[fy*numCols + fx] * baux;
+	////if (fx > numCols - 1 || fy > numRows-1)
+	////	ds_inputChannel[x0 + FILTER_WIDTH][y0 + FILTER_WIDTH] = 0.0f;
+	////else
+	////	ds_inputChannel[x0 + FILTER_WIDTH][y0 + FILTER_WIDTH] = inputChannel[ty*numCols + tx + filterRadius + numCols];
 
-	__syncthreads(); // SyncThreads to have all the share memory complete
+	//__syncthreads(); // SyncThreads to have all the share memory complete
 
-	for (int i = 0; i < FILTER_WIDTH; ++i){
-		for (int j = 0; j < FILTER_WIDTH; ++j){
-			value += filter[j*filterWidth + i] * ds_inputChannel[x0 + i][y0 + j];
-		}
-	}
+	//for (int i = 0; i < FILTER_WIDTH; ++i){
+	//	for (int j = 0; j < FILTER_WIDTH; ++j){
+	//		value += filter[j*filterWidth + i] * ds_inputChannel[x0 + i][y0 + j];
+	//	}
+	//}
 
 	///Share memory, block memory are BLOCK_SIZE
 	//__shared__ float ds_inputChannel[BLOCK_SIZE][BLOCK_SIZE];
@@ -140,23 +140,23 @@ void box_filter(const unsigned char* const inputChannel, unsigned char* const ou
 	//}
 
 	/// Whitout share memory
-	//for (int i = 0; i < filterWidth; ++i){
-	//	/// which pixel is?
-	//	int fx = blockIdx.x*blockDim.x + (threadIdx.x + i - filterRadius);
-	//	/// Clamp of neighbourds values
-	//	if (fx < 0)  fx = 0;
-	//	if (fx > numCols - 1)  fx = numCols - 1;
+	for (int i = 0; i < filterWidth; ++i){
+		/// which pixel is?
+		int fx = blockIdx.x*blockDim.x + (threadIdx.x + i - filterRadius);
+		/// Clamp of neighbourds values
+		if (fx < 0)  fx = 0;
+		if (fx > numCols - 1)  fx = numCols - 1;
 
-	//	for (int j = 0; j < filterWidth; ++j){
-	//		/// which pixel is?
-	//		int fy = blockIdx.y*blockDim.y + (threadIdx.y + j - filterRadius);
-	//		/// Clamp of neighbourds values
-	//		if (fy < 0)  fy = 0;
-	//		if (fy > numRows - 1)  fy = numRows - 1;
-	//		/// Compute the value at the pixel and add it.
-	//		value += filter[j*filterWidth + i] * inputChannel[fy*numCols + fx];
-	//	}
-	//}
+		for (int j = 0; j < filterWidth; ++j){
+			/// which pixel is?
+			int fy = blockIdx.y*blockDim.y + (threadIdx.y + j - filterRadius);
+			/// Clamp of neighbourds values
+			if (fy < 0)  fy = 0;
+			if (fy > numRows - 1)  fy = numRows - 1;
+			/// Compute the value at the pixel and add it.
+			value += filter[j*filterWidth + i] * inputChannel[fy*numCols + fx];
+		}
+	}
 
 	/// Save the value at the outputChanel
 	outputChannel[ty*numCols + tx] = value;
