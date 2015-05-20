@@ -21,7 +21,7 @@
 
 #define BLOCK_SIZE 32
 #define FILTER_WIDTH 5
-#define clamp(x) (min(max((x), 0.0), 1.0))
+#define clamp(x,a,b) (__min(__max((x), a), b))
 
 template<typename T>
 void check(T err, const char* const func, const char* const file, const int line) {
@@ -51,96 +51,56 @@ void box_filter(const unsigned char* const inputChannel, unsigned char* const ou
 	if (tx >= numCols || ty >= numRows)
 		return;
 
-	const int filterRadius = FILTER_WIDTH / 2;
+	const int filterRadius = filterWidth / 2;
 	float value = 0.0f;
 	
 	/// Share memory - Input tiles need to be larger than output tiles
-	//__shared__ float ds_inputChannel[BLOCK_SIZE+FILTER_WIDTH-1][BLOCK_SIZE+FILTER_WIDTH-1];
+	__shared__ float ds_inputChannel[BLOCK_SIZE+FILTER_WIDTH-1][BLOCK_SIZE+FILTER_WIDTH-1];
 
-	//// Each thread copy the vertex of the filter, the 4 corners - error some pixels
-	//int fx, fy; // Index for the filter corners
-	//bool baux;
-	//// case1: upper left
-	//fx = tx - filterRadius;
-	//fy = ty - filterRadius;
+	// Each thread copy the vertex of the filter, the 4 corners - error some pixels
+	int fx, fy; // Index for the filter corners
+	// case1: upper left
+	fx = tx - filterRadius;
+	fy = ty - filterRadius;
+	fx = clamp(fx, 0, numCols-1);
+	fy = clamp(fy, 0, numRows-1);
 	//baux = !((fx < 0) || (fy < 0));
-	//ds_inputChannel[x0][y0] = inputChannel[fy*numCols + fx] * baux;
-	////if (fx < 0 || fy < 0)
-	////	ds_inputChannel[x0][y0] = 0.0f;
-	////else
-	////	ds_inputChannel[x0][y0] = inputChannel[ty*numCols + tx - filterRadius - numCols];
+	ds_inputChannel[x0][y0] = inputChannel[fy*numCols + fx];
 
-	//// case2: upper right
-	//fx = tx + filterRadius;
-	//fy = ty - filterRadius;
-
+	// case2: upper right
+	fx = tx + filterRadius;
+	fy = ty - filterRadius;
+	fx = clamp(fx, 0, numCols - 1);
+	fy = clamp(fy, 0, numRows - 1);
 	//baux = !((fx > numCols - 1) || (fy < 0));
-	//ds_inputChannel[x0 + FILTER_WIDTH][y0] = inputChannel[fy*numCols + fx] * baux;
-	////if (fx > numCols-1 || fy < 0)
-	////	ds_inputChannel[x0 + FILTER_WIDTH][y0] = 0.0f;
-	////else
-	////	ds_inputChannel[x0 + FILTER_WIDTH][y0] = inputChannel[ty*numCols + tx + filterRadius - numCols];
+	ds_inputChannel[x0 + FILTER_WIDTH][y0] = inputChannel[fy*numCols + fx];
 
-	//// case3: lower left
-	//fx = tx - filterRadius;
-	//fy = ty + filterRadius;
-
+	// case3: lower left
+	fx = tx - filterRadius;
+	fy = ty + filterRadius;
+	fx = clamp(fx, 0, numCols - 1);
+	fy = clamp(fy, 0, numRows - 1);
 	//baux = !((fx < 0) || (fy > numRows - 1));
-	//ds_inputChannel[x0][y0 + FILTER_WIDTH] = inputChannel[fy*numCols + fx] * baux;
-	////if (fx < 0 || fy > numRows-1)
-	////	ds_inputChannel[x0][y0 + FILTER_WIDTH] = 0.0f;
-	////else
-	////	ds_inputChannel[x0][y0 + FILTER_WIDTH] = inputChannel[ty*numCols + tx - filterRadius + numCols];
+	ds_inputChannel[x0][y0 + FILTER_WIDTH] = inputChannel[fy*numCols + fx];
 
-	//// case4: lower right
-	//fx = tx + filterRadius;
-	//fy = ty + filterRadius;
-
+	// case4: lower right
+	fx = tx + filterRadius;
+	fy = ty + filterRadius;
+	fx = clamp(fx, 0, numCols - 1);
+	fy = clamp(fy, 0, numRows - 1);
 	//baux = !((fx > numCols - 1) || (fy > numRows - 1));
-	//ds_inputChannel[x0 + FILTER_WIDTH][y0 + FILTER_WIDTH] = inputChannel[fy*numCols + fx] * baux;
-	////if (fx > numCols - 1 || fy > numRows-1)
-	////	ds_inputChannel[x0 + FILTER_WIDTH][y0 + FILTER_WIDTH] = 0.0f;
-	////else
-	////	ds_inputChannel[x0 + FILTER_WIDTH][y0 + FILTER_WIDTH] = inputChannel[ty*numCols + tx + filterRadius + numCols];
+	ds_inputChannel[x0 + FILTER_WIDTH][y0 + FILTER_WIDTH] = inputChannel[fy*numCols + fx];
 
-	//__syncthreads(); // SyncThreads to have all the share memory complete
+	__syncthreads(); // SyncThreads to have all the share memory complete
 
-	//for (int i = 0; i < FILTER_WIDTH; ++i){
-	//	for (int j = 0; j < FILTER_WIDTH; ++j){
-	//		value += filter[j*filterWidth + i] * ds_inputChannel[x0 + i][y0 + j];
-	//	}
-	//}
-
-	///Share memory, block memory are BLOCK_SIZE
-	//__shared__ float ds_inputChannel[BLOCK_SIZE][BLOCK_SIZE];
-	/////Each thread copy his pixel to the share memory - inefficient, we have to access to global memory at borders and corners
-	//ds_inputChannel[y0][x0] = inputChannel[ty*numCols + tx];
-	//for (int i = 0; i < FILTER_WIDTH; ++i){
-	//	/// which pixel is?
-	//	//int fx = blockIdx.x*blockDim.x + (threadIdx.x + i - filterRadius);
-	//	int fx = blockIdx.x*blockDim.x + (threadIdx.x + i - filterRadius);
-	//	int fsx = x0 + i - filterRadius;
-	//	/// Clamp of neighbourds values
-	//	if (fx < 0)  fx = 0;
-	//	if (fx > numCols - 1)  fx = numCols - 1;
-
-	//	for (int j = 0; j < FILTER_WIDTH; ++j){
-	//		/// which pixel is?
-	//		int fy = blockIdx.y*blockDim.y + (threadIdx.y + j - filterRadius);
-	//		int fsy = y0 + j - filterRadius;
-	//		/// Clamp of neighbourds values
-	//		if (fy < 0)  fy = 0;
-	//		if (fy > numRows - 1)  fy = numRows - 1;
-	//		/// Compute the value at the pixel and add it - Inefficient, access to global memory and if-else.
-	//		if ((fsx >= 0) && (fsy >= 0) && (fsx <= BLOCK_SIZE - 1) && (fsy <= BLOCK_SIZE - 1))
-	//			value += filter[j*filterWidth + i] * ds_inputChannel[fsy][fsx];
-	//		else
-	//			value += filter[j*filterWidth + i] * inputChannel[fy*numCols + fx];
-	//	}
-	//}
+	for (int i = 0; i < FILTER_WIDTH; ++i){
+		for (int j = 0; j < FILTER_WIDTH; ++j){
+			value += filter[j*FILTER_WIDTH + i] * ds_inputChannel[x0+i][y0+j];
+		}
+	}
 
 	/// Whitout share memory
-	for (int i = 0; i < filterWidth; ++i){
+	/*for (int i = 0; i < filterWidth; ++i){
 		/// which pixel is?
 		int fx = blockIdx.x*blockDim.x + (threadIdx.x + i - filterRadius);
 		/// Clamp of neighbourds values
@@ -156,7 +116,8 @@ void box_filter(const unsigned char* const inputChannel, unsigned char* const ou
 			/// Compute the value at the pixel and add it.
 			value += filter[j*filterWidth + i] * inputChannel[fy*numCols + fx];
 		}
-	}
+	}*/
+
 
 	/// Save the value at the outputChanel
 	outputChannel[ty*numCols + tx] = value;
@@ -246,7 +207,6 @@ void allocateMemoryAndCopyToGPU(const size_t numRowsImage, const size_t numColsI
 void create_filter(float **h_filter, int *filterWidth){
 
 	const int KernelWidth = 5; //OJO CON EL TAMAÑO DEL FILTRO//
-	//printf("%d\n",KernelWidth);
 	//const int KernelWidth = 3;
 	*filterWidth = KernelWidth;
 
@@ -277,11 +237,17 @@ void create_filter(float **h_filter, int *filterWidth){
 	*/
 
 	//The same image
-	//(*h_filter)[0] = 0;		(*h_filter)[1] = 0;		(*h_filter)[2] = 0;		(*h_filter)[3] = 0;		(*h_filter)[4] = 0;
-	//(*h_filter)[5] = 0;		(*h_filter)[6] = 0;		(*h_filter)[7] = 0;		(*h_filter)[8] = 0;		(*h_filter)[9] = 0;
-	//(*h_filter)[10] = 0;	(*h_filter)[11] = 0;	(*h_filter)[12] = 1.;	(*h_filter)[13] = 0;	(*h_filter)[14] = 0;
-	//(*h_filter)[15] = 0;	(*h_filter)[16] = 0;	(*h_filter)[17] = 0;	(*h_filter)[18] = 0;	(*h_filter)[19] = 0;
-	//(*h_filter)[20] = 0;	(*h_filter)[21] = 0;	(*h_filter)[22] = 0;	(*h_filter)[23] = 0;	(*h_filter)[24] = 0;
+	//(*h_filter)[0] = 0;		(*h_filter)[1] = 0;		(*h_filter)[2] = 0;		(*h_filter)[3] = 0;		(*h_filter)[4] = 0;		(*h_filter)[5] = 0;		(*h_filter)[6] = 0;		(*h_filter)[7] = 0;		(*h_filter)[8] = 0;		(*h_filter)[9] = 0;		(*h_filter)[10] = 0;
+	//(*h_filter)[11] = 0;	(*h_filter)[12] = 0;	(*h_filter)[13] = 0;	(*h_filter)[14] = 0;	(*h_filter)[15] = 0;	(*h_filter)[16] = 0;	(*h_filter)[17] = 0;	(*h_filter)[18] = 0;	(*h_filter)[19] = 0;	(*h_filter)[20] = 0;	(*h_filter)[21] = 0;
+	//(*h_filter)[22] = 0;	(*h_filter)[23] = 0;	(*h_filter)[24] = 0;	(*h_filter)[25] = 0;	(*h_filter)[26] = 0;	(*h_filter)[27] = 0;	(*h_filter)[28] = 0;	(*h_filter)[29] = 0;	(*h_filter)[30] = 0;	(*h_filter)[31] = 0;	(*h_filter)[32] = 0;
+	//(*h_filter)[33] = 0;	(*h_filter)[34] = 0;	(*h_filter)[35] = 0;	(*h_filter)[36] = 0;	(*h_filter)[37] = 0;	(*h_filter)[38] = 0;	(*h_filter)[39] = 0;	(*h_filter)[40] = 0;	(*h_filter)[41] = 0;	(*h_filter)[42] = 0;	(*h_filter)[43] = 0;
+	//(*h_filter)[44] = 0;	(*h_filter)[45] = 0;	(*h_filter)[46] = 0;	(*h_filter)[47] = 0;	(*h_filter)[48] = 0;	(*h_filter)[49] = 0;	(*h_filter)[50] = 0;	(*h_filter)[51] = 0;	(*h_filter)[52] = 0;	(*h_filter)[53] = 0;	(*h_filter)[54] = 0;
+	//(*h_filter)[55] = 0;	(*h_filter)[56] = 0;	(*h_filter)[57] = 0;	(*h_filter)[58] = 0;	(*h_filter)[59] = 0;	(*h_filter)[60] = 1.;	(*h_filter)[61] = 0;	(*h_filter)[62] = 0;	(*h_filter)[63] = 0;	(*h_filter)[64] = 0;	(*h_filter)[65] = 0;
+	//(*h_filter)[66] = 0;	(*h_filter)[67] = 0;	(*h_filter)[68] = 0;	(*h_filter)[69] = 0;	(*h_filter)[70] = 0;	(*h_filter)[71] = 0;	(*h_filter)[72] = 0;	(*h_filter)[73] = 0;	(*h_filter)[74] = 0;	(*h_filter)[75] = 0;	(*h_filter)[76] = 0;
+	//(*h_filter)[77] = 0;	(*h_filter)[78] = 0;	(*h_filter)[79] = 0;	(*h_filter)[80] = 0;	(*h_filter)[81] = 0;	(*h_filter)[82] = 0;	(*h_filter)[83] = 0;	(*h_filter)[84] = 0;	(*h_filter)[85] = 0;	(*h_filter)[86] = 0;	(*h_filter)[87] = 0;
+	//(*h_filter)[88] = 0;	(*h_filter)[89] = 0;	(*h_filter)[90] = 0;	(*h_filter)[91] = 0;	(*h_filter)[92] = 0;	(*h_filter)[93] = 0;	(*h_filter)[94] = 0;	(*h_filter)[95] = 0;	(*h_filter)[96] = 0;	(*h_filter)[97] = 0;	(*h_filter)[98] = 0;
+	//(*h_filter)[99] = 0;	(*h_filter)[100] = 0;	(*h_filter)[101] = 0;	(*h_filter)[102] = 0;	(*h_filter)[103] = 0;	(*h_filter)[104] = 0;	(*h_filter)[105] = 0;	(*h_filter)[106] = 0;	(*h_filter)[107] = 0;	(*h_filter)[108] = 0;	(*h_filter)[109] = 0;
+	//(*h_filter)[110] = 0;	(*h_filter)[111] = 0;	(*h_filter)[112] = 0;	(*h_filter)[113] = 0;	(*h_filter)[114] = 0;	(*h_filter)[115] = 0;	(*h_filter)[116] = 0;	(*h_filter)[117] = 0;	(*h_filter)[118] = 0;	(*h_filter)[119] = 0;	(*h_filter)[120] = 0;
 
 	//Laplaciano 5x5
 	(*h_filter)[0] = 0;   (*h_filter)[1] = 0;    (*h_filter)[2] = -1.;  (*h_filter)[3] = 0;    (*h_filter)[4] = 0;
