@@ -35,6 +35,7 @@ void check(T err, const char* const func, const char* const file, const int line
 // Optimize for pointer aliasing using __restrict__ allows CUDA commpiler to use the read-only data cache and improves performance
 __global__
 void box_filter(const unsigned char* const inputChannel, unsigned char* const outputChannel, int numRows, int numCols, const float* __restrict__ filter, const int filterWidth)
+//void box_filter(const unsigned char* const inputChannel, unsigned char* const outputChannel, int numRows, int numCols, const float* filter, const int filterWidth)
 {
 	// NOTA: Que un thread tenga una posición correcta en 2D no quiere decir que al aplicar el filtro
 	// los valores de sus vecinos sean correctos, ya que pueden salirse de la imagen.
@@ -55,6 +56,7 @@ void box_filter(const unsigned char* const inputChannel, unsigned char* const ou
 	
 	/// Share memory - Input tiles need to be larger than output tiles
 	__shared__ float ds_inputChannel[BLOCK_SIZE+FILTER_WIDTH-1][BLOCK_SIZE+FILTER_WIDTH-1];
+
 	// Each thread copy the vertex of the filter, the 4 corners - error some pixels
 	int fx, fy; // Index for the filter corners
 	// case1: upper left
