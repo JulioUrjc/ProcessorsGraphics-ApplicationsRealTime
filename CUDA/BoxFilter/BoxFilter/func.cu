@@ -100,21 +100,24 @@ void box_filter(const unsigned char* const inputChannel, unsigned char* const ou
 	}
 
 	/// Whitout share memory
-	//for (int i = 0; i < filterWidth; ++i){
-	//	/// which pixel is?
-	//	int fx = blockIdx.x*blockDim.x + (threadIdx.x + i - filterRadius);
-	//	/// Clamp of neighbourds values
-	//	fx = clamp(fx, 0, numCols - 1);
+	/*for (int i = 0; i < filterWidth; ++i){
+		/// which pixel is?
+		int fx = blockIdx.x*blockDim.x + (threadIdx.x + i - filterRadius);
+		/// Clamp of neighbourds values
+		if (fx < 0)  fx = 0;
+		if (fx > numCols - 1)  fx = numCols - 1;
 
-	//	for (int j = 0; j < filterWidth; ++j){
-	//		/// which pixel is?
-	//		int fy = blockIdx.y*blockDim.y + (threadIdx.y + j - filterRadius);
-	//		/// Clamp of neighbourds values
-	//		fy = clamp(fy, 0, numRows - 1);
-	//		/// Compute the value at the pixel and add it.
-	//		value += filter[j*filterWidth + i] * inputChannel[fy*numCols + fx];
-	//	}
-	//}
+		for (int j = 0; j < filterWidth; ++j){
+			/// which pixel is?
+			int fy = blockIdx.y*blockDim.y + (threadIdx.y + j - filterRadius);
+			/// Clamp of neighbourds values
+			if (fy < 0)  fy = 0;
+			if (fy > numRows - 1)  fy = numRows - 1;
+			/// Compute the value at the pixel and add it.
+			value += filter[j*filterWidth + i] * inputChannel[fy*numCols + fx];
+		}
+	}*/
+
 
 	/// Save the value at the outputChanel
 	outputChannel[ty*numCols + tx] = value;
