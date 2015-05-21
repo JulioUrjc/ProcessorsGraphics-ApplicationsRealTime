@@ -73,7 +73,7 @@ void box_filter(const unsigned char* const inputChannel, unsigned char* const ou
 	fx = clamp(fx, 0, numCols - 1);
 	fy = clamp(fy, 0, numRows - 1);
 	//baux = !((fx > numCols - 1) || (fy < 0));
-	ds_inputChannel[x0 + FILTER_WIDTH][y0] = inputChannel[fy*numCols + fx];
+	ds_inputChannel[x0 + FILTER_WIDTH-1][y0] = inputChannel[fy*numCols + fx];
 
 	// case3: lower left
 	fx = tx - filterRadius;
@@ -81,7 +81,7 @@ void box_filter(const unsigned char* const inputChannel, unsigned char* const ou
 	fx = clamp(fx, 0, numCols - 1);
 	fy = clamp(fy, 0, numRows - 1);
 	//baux = !((fx < 0) || (fy > numRows - 1));
-	ds_inputChannel[x0][y0 + FILTER_WIDTH] = inputChannel[fy*numCols + fx];
+	ds_inputChannel[x0][y0 + FILTER_WIDTH-1] = inputChannel[fy*numCols + fx];
 
 	// case4: lower right
 	fx = tx + filterRadius;
@@ -89,7 +89,7 @@ void box_filter(const unsigned char* const inputChannel, unsigned char* const ou
 	fx = clamp(fx, 0, numCols - 1);
 	fy = clamp(fy, 0, numRows - 1);
 	//baux = !((fx > numCols - 1) || (fy > numRows - 1));
-	ds_inputChannel[x0 + FILTER_WIDTH][y0 + FILTER_WIDTH] = inputChannel[fy*numCols + fx];
+	ds_inputChannel[x0 + FILTER_WIDTH-1][y0 + FILTER_WIDTH-1] = inputChannel[fy*numCols + fx];
 
 	__syncthreads(); // SyncThreads to have all the share memory complete
 
